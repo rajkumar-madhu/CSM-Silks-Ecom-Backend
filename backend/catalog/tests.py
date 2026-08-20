@@ -382,3 +382,44 @@ class CatalogFacetCountTests(TestCase):
 
         response = self.client.get("/api/products", {"gender": "women", "color": "Red"})
         self.assertEqual(response.json()["total"], 1)
+
+
+class AttributeOptionSeedTests(TestCase):
+    def test_seed_migration_creates_vocabularies(self):
+        from catalog.models import AttributeOption
+
+        fabrics = set(
+            AttributeOption.objects.filter(key=AttributeOption.Key.FABRIC).values_list("value_slug", flat=True)
+        )
+        self.assertIn("kanjivaram-silk", fabrics)
+        self.assertIn("patola-silk", fabrics)
+        self.assertEqual(AttributeOption.objects.filter(key=AttributeOption.Key.ZARI).count(), 8)
+        self.assertEqual(AttributeOption.objects.filter(key=AttributeOption.Key.WEAVE).count(), 5)
+
+    def test_key_and_slug_are_unique_together(self):
+        # value_slug deliberately avoids "woven" (and any other seeded work slug):
+        # the seed migration already inserts key="work", value_slug="woven", so
+        # reusing it would collide on the very first create() below, before the
+        # assertRaises block that is meant to observe the collision.
+        from django.db.utils import IntegrityError
+        from catalog.models import AttributeOption
+
+        AttributeOption.objects.create(key=AttributeOption.Key.WORK, value_slug="hand-stitched", label="Hand-stitched")
+        with self.assertRaises(IntegrityError):
+            AttributeOption.objects.create(key=AttributeOption.Key.WORK, value_slug="hand-stitched", label="Hand-stitched Again")
+
+    def test_same_slug_allowed_under_different_keys(self):
+        from catalog.models import AttributeOption
+
+        AttributeOption.objects.create(key=AttributeOption.Key.BORDER, value_slug="temple", label="Temple Border")
+        AttributeOption.objects.create(key=AttributeOption.Key.PALLU, value_slug="temple", label="Temple Pallu")
+        self.assertEqual(AttributeOption.objects.filter(value_slug="temple").count(), 2)
+
+    def test_category_product_type_marks_sarees_and_menswear(self):
+        from catalog.models import Category
+
+        saree = Category.objects.create(name="Patola", slug="patola-test", gender="women")
+        self.assertEqual(saree.product_type, Category.ProductType.OTHER)
+        saree.product_type = Category.ProductType.SAREE
+        saree.save(update_fields=["product_type"])
+        self.assertEqual(Category.objects.filter(product_type="saree").count(), 1)

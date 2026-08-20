@@ -12,9 +12,17 @@ class Category(models.Model):
         MEN = "men", "Men"
         UNISEX = "unisex", "Unisex"
 
+    class ProductType(models.TextChoices):
+        SAREE = "saree", "Saree"
+        MENSWEAR = "menswear", "Menswear"
+        OTHER = "other", "Other"
+
     name = models.CharField(max_length=120)
     slug = models.SlugField(unique=True)
     gender = models.CharField(max_length=10, choices=Gender.choices, default=Gender.WOMEN)
+    # Which attribute panel applies. Deliberately NOT derived from `gender`: today
+    # gender="women" happens to mean "is a saree", but the first women's kurti breaks that.
+    product_type = models.CharField(max_length=10, choices=ProductType.choices, default=ProductType.OTHER, db_index=True)
     parent = models.ForeignKey("self", null=True, blank=True, related_name="children", on_delete=models.SET_NULL)
     sort_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
@@ -189,3 +197,35 @@ class StockAlert(models.Model):
 
     def __str__(self) -> str:
         return f"{self.phone} → {self.variant.sku}"
+
+
+class AttributeOption(models.Model):
+    """Controlled vocabulary for filterable saree attributes.
+
+    The governing rule: adding a *value* is an admin action; adding an *attribute*
+    is a migration. Free text on ProductVariant.fabric fragmented into
+    "Kanjivaram Silk" vs "Pure Kanjivaram Silk" — two checkboxes for one fabric.
+    """
+
+    class Key(models.TextChoices):
+        FABRIC = "fabric", "Fabric"
+        WEAVE = "weave", "Weave"
+        ZARI = "zari", "Zari"
+        BORDER = "border", "Border"
+        PALLU = "pallu", "Pallu"
+        WORK = "work", "Work"
+        ORIGIN = "origin", "Origin"
+
+    key = models.CharField(max_length=24, choices=Key.choices, db_index=True)
+    value_slug = models.SlugField(max_length=80)
+    label = models.CharField(max_length=120)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_filterable = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ("key", "value_slug")
+        ordering = ["key", "sort_order", "label"]
+
+    def __str__(self) -> str:
+        return f"{self.get_key_display()}: {self.label}"
