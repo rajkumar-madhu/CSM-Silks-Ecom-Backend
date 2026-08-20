@@ -7,7 +7,7 @@ from rest_framework.test import APIClient
 
 from inventory.models import StockLedger
 
-from .models import Category, Product, ProductVariant, StockAlert
+from .models import AttributeOption, Category, Product, ProductVariant, StockAlert
 from .tasks import notify_restocked_watchers
 
 User = get_user_model()
@@ -304,12 +304,16 @@ class CatalogFacetCountTests(TestCase):
         self.client = APIClient()
         self.sarees = Category.objects.create(name="Kanjivaram", slug="kanjivaram", gender="women")
         self.bridal = Category.objects.create(name="Bridal", slug="bridal", gender="women")
+        # Fabric is a controlled Product attribute now, not free text on the variant.
+        self.pure_silk = AttributeOption.objects.create(key="fabric", value_slug="pure-silk-test", label="Pure silk")
+        self.mysore = AttributeOption.objects.create(key="fabric", value_slug="mysore-silk-test", label="Mysore silk")
         self.ruby = Product.objects.create(
             name="Ruby Bridal Kanjivaram",
             slug="ruby-bridal-kanjivaram",
             category=self.bridal,
             gender="women",
             occasions=["Wedding", "Festive"],
+            fabric=self.pure_silk,
             base_price=15990,
             base_mrp=19990,
             is_active=True,
@@ -322,7 +326,6 @@ class CatalogFacetCountTests(TestCase):
             stock_qty=5,
             color_name="Red",
             color_hex="#a01c1c",
-            fabric="Pure silk",
         )
         self.emerald = Product.objects.create(
             name="Emerald Mysore Silk",
@@ -330,6 +333,7 @@ class CatalogFacetCountTests(TestCase):
             category=self.sarees,
             gender="women",
             occasions=["Festive"],
+            fabric=self.mysore,
             base_price=8990,
             base_mrp=10990,
             is_active=True,
@@ -342,7 +346,6 @@ class CatalogFacetCountTests(TestCase):
             stock_qty=8,
             color_name="Green",
             color_hex="#116644",
-            fabric="Mysore silk",
         )
 
     def test_facets_include_counts(self):
@@ -423,3 +426,68 @@ class AttributeOptionSeedTests(TestCase):
         saree.product_type = Category.ProductType.SAREE
         saree.save(update_fields=["product_type"])
         self.assertEqual(Category.objects.filter(product_type="saree").count(), 1)
+
+
+class SareeAttributeBackfillTests(TestCase):
+    """The backfill is the whole point of this task: it must collapse duplicate
+    fabric labels, move a border value out of the zari column, and never silently
+    drop an unrecognised string."""
+
+    def test_duplicate_fabric_labels_collapse_to_one_option(self):
+        from catalog.migrations import _attribute_backfill as backfill
+
+        self.assertEqual(backfill.FABRIC_MAP["Pure Kanjivaram Silk"], "kanjivaram-silk")
+        self.assertEqual(backfill.FABRIC_MAP["Kanjivaram Silk"], "kanjivaram-silk")
+
+    def test_fine_zari_border_splits_into_zari_and_border(self):
+        from catalog.migrations import _attribute_backfill as backfill
+
+        self.assertEqual(backfill.ZARI_MAP["Fine Zari Border"], ("gold-zari", "zari-border"))
+
+    def test_every_known_zari_string_is_mapped(self):
+        from catalog.migrations import _attribute_backfill as backfill
+
+        # Every distinct zari_type string present in the seeded catalogue, sarees and menswear.
+        known = {
+            "Real Gold Zari", "Silver Zari", "Silver and Gold Zari", "Antique Zari",
+            "Minimal Zari", "Fine Zari Border", "Gold Zari", "Gold Border",
+            "Minimal Border", "Self Weave", "Antique Thread Work", "Thread Embroidery",
+        }
+        self.assertEqual(known - set(backfill.ZARI_MAP), set())
+
+    def test_unmapped_value_is_preserved_as_non_filterable(self):
+        from catalog.models import AttributeOption
+        from catalog.migrations import _attribute_backfill as backfill
+
+        option = backfill.resolve_or_park(AttributeOption, "fabric", "Moonlight Tissue Silk")
+        self.assertFalse(option.is_filterable)
+        self.assertIn("needs-review", option.label)
+
+    def test_variant_serializer_still_exposes_fabric_and_zari_strings(self):
+        from catalog.models import AttributeOption, Category, Product, ProductVariant
+        from catalog.serializers import ProductVariantSerializer
+
+        category = Category.objects.create(name="Kanjivaram", slug="kanjivaram-x", gender="women")
+        product = Product.objects.create(
+            name="Test Saree", slug="test-saree", category=category, gender="women",
+            base_price=100, base_mrp=200,
+            fabric=AttributeOption.objects.get(key="fabric", value_slug="kanjivaram-silk"),
+            zari=AttributeOption.objects.get(key="zari", value_slug="real-gold-zari"),
+        )
+        variant = ProductVariant.objects.create(product=product, sku="TS-1", price=100, mrp=200, stock_qty=1)
+        data = ProductVariantSerializer(variant).data
+        self.assertEqual(data["fabric"], "Kanjivaram Silk")
+        self.assertEqual(data["zari_type"], "Real Gold Zari")
+
+    def test_product_with_no_attributes_serializes_blank_not_null(self):
+        from catalog.models import Category, Product, ProductVariant
+        from catalog.serializers import ProductVariantSerializer
+
+        category = Category.objects.create(name="Plain", slug="plain-x", gender="women")
+        product = Product.objects.create(
+            name="Bare", slug="bare", category=category, gender="women", base_price=1, base_mrp=1
+        )
+        variant = ProductVariant.objects.create(product=product, sku="BARE-1", price=1, mrp=1, stock_qty=1)
+        data = ProductVariantSerializer(variant).data
+        self.assertEqual(data["fabric"], "")
+        self.assertEqual(data["zari_type"], "")

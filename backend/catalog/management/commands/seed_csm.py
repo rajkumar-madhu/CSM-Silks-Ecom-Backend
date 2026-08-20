@@ -7,7 +7,8 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from accounts.models import Address
-from catalog.models import Category, Product, ProductImage, ProductVariant
+from catalog.migrations._attribute_backfill import FABRIC_MAP, WORK_MAP, ZARI_MAP
+from catalog.models import AttributeOption, Category, Product, ProductImage, ProductVariant
 from inventory.models import StockLedger
 from loyalty.models import LoyaltyReward
 from orders.models import Coupon
@@ -323,6 +324,13 @@ PRODUCTS = [
 SERVICEABLE_PINS = ["600001", "600017", "631501", "560001", "400001", "110001", "500001", "700001"]
 
 
+def _option(key: str, slug: str | None):
+    """Look up a seeded AttributeOption, or None when the fixture has no value for it."""
+    if not slug:
+        return None
+    return AttributeOption.objects.filter(key=key, value_slug=slug).first()
+
+
 class Command(BaseCommand):
     help = "Seed CSM Silks starter retailer catalog data."
 
@@ -369,6 +377,10 @@ class Command(BaseCommand):
         for pdata in PRODUCTS:
             slug, category_name, gender = pdata["category"]
             category, _ = Category.objects.get_or_create(slug=slug, defaults={"name": category_name, "gender": gender})
+            # The fixture still describes fabric/zari as free text; the same mapping
+            # tables the backfill migration uses turn them into controlled options, so
+            # a freshly seeded database matches a migrated one exactly.
+            zari_slug, border_slug = ZARI_MAP.get(pdata["zari"], (None, None))
             product, _ = Product.objects.update_or_create(
                 slug=pdata["slug"],
                 defaults={
@@ -379,6 +391,10 @@ class Command(BaseCommand):
                     "gender": pdata["gender"],
                     "tags": pdata["tags"],
                     "occasions": pdata["occasions"],
+                    "fabric": _option("fabric", FABRIC_MAP.get(pdata["fabric"])),
+                    "zari": _option("zari", zari_slug),
+                    "border": _option("border", border_slug),
+                    "work": _option("work", WORK_MAP.get(pdata["zari"])),
                     "brand": "CSM Silks",
                     "seller_name": "CSM Silks Kanchipuram",
                     "base_price": Decimal(pdata["price"]),
@@ -421,8 +437,6 @@ class Command(BaseCommand):
                     "color_name": color_name,
                     "color_hex": color_hex,
                     "size": "Free Size" if gender == "women" else "M-XL",
-                    "fabric": pdata["fabric"],
-                    "zari_type": pdata["zari"],
                     "blouse_included": gender == "women",
                     "length_meters": Decimal("6.30") if gender == "women" else None,
                     "care_instructions": "Dry clean only",

@@ -16,9 +16,12 @@ def _split_multi(value) -> list[str]:
 
 def product_base_queryset() -> QuerySet[Product]:
     return (
-        Product.objects.select_related("category")
+        Product.objects.select_related("category", "fabric", "weave", "zari", "border", "pallu", "work", "origin")
         .prefetch_related(
-            Prefetch("variants", queryset=ProductVariant.objects.order_by("id")),
+            Prefetch(
+                "variants",
+                queryset=ProductVariant.objects.select_related("product__fabric", "product__zari").order_by("id"),
+            ),
             Prefetch("images", queryset=ProductImage.objects.order_by("sort_order", "id")),
             "collections",
         )
@@ -56,7 +59,7 @@ def public_products(params) -> QuerySet[Product]:
             | Q(hook__icontains=search)
             | Q(category__name__icontains=search)
             | Q(variants__sku__icontains=search)
-            | Q(variants__fabric__icontains=search)
+            | Q(fabric__label__icontains=search)
         ).distinct()
     if min_price:
         qs = qs.filter(variants__price__gte=min_price).distinct()
@@ -70,7 +73,7 @@ def public_products(params) -> QuerySet[Product]:
     if fabric:
         fabric_q = Q()
         for value in _split_multi(fabric):
-            fabric_q |= Q(variants__fabric__icontains=value)
+            fabric_q |= Q(fabric__label__icontains=value)
         qs = qs.filter(fabric_q).distinct()
     if occasion:
         occasion_q = Q()

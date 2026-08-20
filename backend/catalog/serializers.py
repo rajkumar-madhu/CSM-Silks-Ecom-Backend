@@ -24,6 +24,17 @@ class CollectionSerializer(serializers.ModelSerializer):
 
 class ProductVariantSerializer(serializers.ModelSerializer):
     available_qty = serializers.IntegerField(read_only=True)
+    # Kept as string keys for API compatibility — every existing client (PDP, admin
+    # list, mobile) reads variant.fabric. The values now come from the product's
+    # controlled attributes, so there is one source of truth, not two.
+    fabric = serializers.SerializerMethodField()
+    zari_type = serializers.SerializerMethodField()
+
+    def get_fabric(self, obj) -> str:
+        return obj.product.fabric.label if obj.product.fabric_id else ""
+
+    def get_zari_type(self, obj) -> str:
+        return obj.product.zari.label if obj.product.zari_id else ""
 
     class Meta:
         model = ProductVariant
@@ -38,6 +49,8 @@ class ProductVariantSerializer(serializers.ModelSerializer):
             "zari_type",
             "blouse_included",
             "length_meters",
+            "blouse_length_meters",
+            "weight_grams",
             "care_instructions",
             "price",
             "mrp",
@@ -435,8 +448,6 @@ class AdminProductQuickCreateSerializer(serializers.Serializer):
             color_name=color_name,
             color_hex=validated_data.get("color_hex", "") or "#C4923A",
             size=validated_data.get("size", ""),
-            fabric=fabric,
-            zari_type=validated_data.get("zari_type", ""),
             blouse_included=validated_data.get("blouse_included", True),
             price=price,
             mrp=mrp,
@@ -479,8 +490,6 @@ class AdminVariantWriteSerializer(serializers.ModelSerializer):
             "color_name",
             "color_hex",
             "size",
-            "fabric",
-            "zari_type",
             "blouse_included",
             "length_meters",
             "care_instructions",

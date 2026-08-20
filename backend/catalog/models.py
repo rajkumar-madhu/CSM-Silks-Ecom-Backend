@@ -65,6 +65,38 @@ class Product(models.Model):
     gender = models.CharField(max_length=10, choices=Gender.choices, default=Gender.WOMEN)
     tags = models.JSONField(default=list, blank=True)
     occasions = models.JSONField(default=list, blank=True)
+    # Saree design attributes. Properties of the design, not the colourway, so they
+    # live on Product rather than ProductVariant. PROTECT: retiring an option that
+    # products still point at must fail loudly, not orphan them.
+    fabric = models.ForeignKey(
+        "AttributeOption", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="products_fabric", limit_choices_to={"key": "fabric"},
+    )
+    weave = models.ForeignKey(
+        "AttributeOption", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="products_weave", limit_choices_to={"key": "weave"},
+    )
+    zari = models.ForeignKey(
+        "AttributeOption", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="products_zari", limit_choices_to={"key": "zari"},
+    )
+    border = models.ForeignKey(
+        "AttributeOption", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="products_border", limit_choices_to={"key": "border"},
+    )
+    pallu = models.ForeignKey(
+        "AttributeOption", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="products_pallu", limit_choices_to={"key": "pallu"},
+    )
+    work = models.ForeignKey(
+        "AttributeOption", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="products_work", limit_choices_to={"key": "work"},
+    )
+    origin = models.ForeignKey(
+        "AttributeOption", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="products_origin", limit_choices_to={"key": "origin"},
+    )
+    silk_mark_certified = models.BooleanField(default=False)
     brand = models.CharField(max_length=120, default="CSM Silks")
     seller_name = models.CharField(max_length=140, default="CSM Silks Kanchipuram")
     hsn_code = models.CharField(max_length=10, default="5007")
@@ -131,10 +163,10 @@ class ProductVariant(models.Model):
     color_name = models.CharField(max_length=60, blank=True)
     color_hex = models.CharField(max_length=16, blank=True)
     size = models.CharField(max_length=40, blank=True)
-    fabric = models.CharField(max_length=100, blank=True)
-    zari_type = models.CharField(max_length=80, blank=True)
     blouse_included = models.BooleanField(default=True)
     length_meters = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    blouse_length_meters = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    weight_grams = models.PositiveIntegerField(null=True, blank=True)
     care_instructions = models.TextField(blank=True)
     price = models.DecimalField(max_digits=12, decimal_places=2)
     mrp = models.DecimalField(max_digits=12, decimal_places=2)

@@ -87,10 +87,11 @@ class CatalogFacetsView(APIView):
             .order_by("color_name")
         )
         fabric_counts = (
-            variants.exclude(fabric="")
-            .values("fabric")
-            .annotate(count=Count("product_id", distinct=True))
-            .order_by("fabric")
+            products.exclude(fabric__isnull=True)
+            .order_by()
+            .values("fabric__label")
+            .annotate(count=Count("id", distinct=True))
+            .order_by("fabric__label")
         )
         occasion_counter = Counter(
             occasion for product in products for occasion in (product.occasions or [])
@@ -104,12 +105,12 @@ class CatalogFacetsView(APIView):
             {
                 "categories": CategorySerializer(Category.objects.filter(is_active=True), many=True).data,
                 "colors": list(colors),
-                "fabrics": [row["fabric"] for row in fabric_counts],
+                "fabrics": [row["fabric__label"] for row in fabric_counts],
                 "occasions": sorted(occasion_counter),
                 "price": price_bounds,
                 "total": products.distinct().count(),
                 "category_counts": category_counts,
-                "fabric_counts": [{"name": row["fabric"], "count": row["count"]} for row in fabric_counts],
+                "fabric_counts": [{"name": row["fabric__label"], "count": row["count"]} for row in fabric_counts],
                 "occasion_counts": [
                     {"name": name, "count": occasion_counter[name]} for name in sorted(occasion_counter)
                 ],
