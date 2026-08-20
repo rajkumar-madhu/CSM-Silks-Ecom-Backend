@@ -1,12 +1,25 @@
 /* ============================================================
-   PLP filter sidebar + active-filter chip row.
+   PLP two-column layout (plp-body/plp-main) + filter sidebar +
+   active-filter chip row.
    Shared across every filter group (Category, Price, Colour, Discount,
    Rating, Availability, and the generic saree attribute groups), so
    styling these classes once fixes the whole filter rail at the same
-   time. Deliberately scoped to the sidebar/chip surface — the banners,
-   product grid, mobile drawer/sheet and mobile bar live elsewhere and
-   are not touched here.
+   time. Deliberately scoped to plp-body/plp-main (the aside's own
+   container) plus the sidebar/chip surface — the banners, product
+   grid, mobile drawer/sheet and mobile bar live elsewhere and are not
+   touched here.
    ============================================================ */
+
+.plp-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.plp-main {
+  flex: 1;
+  min-width: 0;
+}
 
 .plp-aside {
   width: 280px;
@@ -14,9 +27,11 @@
 }
 
 @media (max-width: 860px) {
-  /* The mobile filter entry point is the "Filter" button in
-     plp-mobile-bar, which opens the same FilterSidebar inside
-     plp-drawer-body — the desktop rail would otherwise duplicate it. */
+  /* FilterSidebar is rendered a second time inside plp-drawer-body,
+     opened by the "Filter" button in plp-mobile-bar — that drawer is
+     the mobile filter path, so the desktop rail hides here instead of
+     stacking above the grid. 860px matches the breakpoint already used
+     elsewhere in commerce.css (and tokens.css's --bp-lg). */
   .plp-aside {
     display: none;
   }
