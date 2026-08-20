@@ -413,6 +413,18 @@ export interface Toast {
   msg: string;
 }
 
+export interface CatalogAttributeOption {
+  slug: string;
+  label: string;
+  count: number;
+}
+
+export interface CatalogAttributeGroup {
+  key: string;
+  label: string;
+  options: CatalogAttributeOption[];
+}
+
 export interface CatalogFacets {
   categories: CatalogCategory[];
   colors: Array<{ color_name: string; color_hex: string; count?: number }>;
@@ -424,6 +436,7 @@ export interface CatalogFacets {
   category_counts?: Record<string, number>;
   fabric_counts?: Array<{ name: string; count: number }>;
   occasion_counts?: Array<{ name: string; count: number }>;
+  attributes?: CatalogAttributeGroup[];
 }
 
 export interface DeliveryCheck {

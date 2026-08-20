@@ -26,7 +26,7 @@ describe('parsePlpParams', () => {
       maxPrice: '5000',
       discountMin: '25',
       colors: ['Red', 'Green'],
-      fabrics: ['Pure silk'],
+      attributes: { fabric: ['Pure silk'] },
       occasions: ['Wedding'],
       inStock: false,
     });
@@ -59,7 +59,7 @@ describe('plpStateToParams', () => {
 describe('buildProductQuery', () => {
   it('maps state onto the API contract', () => {
     const query = buildProductQuery(
-      { ...DEFAULT_PLP_STATE, colors: ['Red', 'Green'], fabrics: ['Silk'], maxPrice: '9000' },
+      { ...DEFAULT_PLP_STATE, colors: ['Red', 'Green'], attributes: { fabric: ['Silk'] }, maxPrice: '9000' },
       { gender: 'women', page: 2, perPage: 24 },
     );
     expect(query).toMatchObject({
@@ -114,5 +114,45 @@ describe('clearedPlpState', () => {
   it('resets filters but keeps the sort order', () => {
     const state = { ...DEFAULT_PLP_STATE, sort: 'price_desc', colors: ['Red'], inStock: false };
     expect(clearedPlpState(state)).toEqual({ ...DEFAULT_PLP_STATE, sort: 'price_desc' });
+  });
+});
+
+describe('attribute filters', () => {
+  it('round-trips attribute selections through the URL', () => {
+    const state = { ...DEFAULT_PLP_STATE, attributes: { fabric: ['kanjivaram-silk'], zari: ['real-gold-zari'] } };
+    const params = plpStateToParams(state);
+    expect(params.get('fabric')).toBe('kanjivaram-silk');
+    expect(params.get('zari')).toBe('real-gold-zari');
+    expect(parsePlpParams(params).attributes).toEqual(state.attributes);
+  });
+
+  it('accepts the legacy ?fabrics= param and re-serializes it as ?fabric=', () => {
+    const parsed = parsePlpParams(new URLSearchParams('fabrics=kanjivaram-silk'));
+    expect(parsed.attributes.fabric).toEqual(['kanjivaram-silk']);
+    expect(plpStateToParams(parsed).get('fabric')).toBe('kanjivaram-silk');
+    expect(plpStateToParams(parsed).get('fabrics')).toBeNull();
+  });
+
+  it('ignores unknown attribute keys', () => {
+    expect(parsePlpParams(new URLSearchParams('bogus=x')).attributes).toEqual({});
+  });
+
+  it('drops empty attribute groups rather than emitting blank params', () => {
+    const state = { ...DEFAULT_PLP_STATE, attributes: { fabric: [] } };
+    expect(plpStateToParams(state).has('fabric')).toBe(false);
+  });
+
+  it('sends one query param per attribute group', () => {
+    const state = { ...DEFAULT_PLP_STATE, attributes: { fabric: ['a', 'b'], work: ['woven'] } };
+    const query = buildProductQuery(state, { gender: 'women', page: 1, perPage: 24 });
+    expect(query.fabric).toBe('a,b');
+    expect(query.work).toBe('woven');
+    expect(query.zari).toBeUndefined();
+  });
+
+  it('counts each selected attribute value in the active-chip list', () => {
+    const state = { ...DEFAULT_PLP_STATE, attributes: { fabric: ['kanjivaram-silk'], work: ['woven'] } };
+    const chips = activePlpChips(state);
+    expect(chips.filter(chip => chip.key.startsWith('attr:')).length).toBe(2);
   });
 });

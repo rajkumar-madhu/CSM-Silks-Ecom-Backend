@@ -2,6 +2,10 @@
 // single source of truth: parse/serialize must round-trip so links are shareable and
 // back/forward navigation restores the exact view.
 
+// Must match ATTRIBUTE_PARAMS in backend/catalog/selectors.py.
+export const ATTRIBUTE_KEYS = ['fabric', 'weave', 'zari', 'border', 'pallu', 'work', 'origin'] as const;
+export type AttributeKey = (typeof ATTRIBUTE_KEYS)[number];
+
 export interface PlpFilterState {
   category: string;
   sort: string;
@@ -10,7 +14,7 @@ export interface PlpFilterState {
   maxPrice: string;
   discountMin: string;
   colors: string[];
-  fabrics: string[];
+  attributes: Record<string, string[]>;
   occasions: string[];
   inStock: boolean;
 }
@@ -23,7 +27,7 @@ export const DEFAULT_PLP_STATE: PlpFilterState = {
   maxPrice: '',
   discountMin: '',
   colors: [],
-  fabrics: [],
+  attributes: {},
   occasions: [],
   inStock: true,
 };
@@ -43,6 +47,13 @@ function cleanList(value: string | null): string[] {
 
 export function parsePlpParams(params: URLSearchParams): PlpFilterState {
   const sort = params.get('sort') || '';
+  const attributes: Record<string, string[]> = {};
+  for (const key of ATTRIBUTE_KEYS) {
+    // ?fabrics= is the pre-vocabulary param name; accept it, re-serialize as ?fabric=.
+    const raw = params.get(key) ?? (key === 'fabric' ? params.get('fabrics') : null);
+    const values = cleanList(raw);
+    if (values.length) attributes[key] = values;
+  }
   return {
     category: (params.get('category') || '').trim().toLowerCase(),
     sort: SORT_KEYS.has(sort) ? sort : DEFAULT_PLP_STATE.sort,
@@ -51,7 +62,7 @@ export function parsePlpParams(params: URLSearchParams): PlpFilterState {
     maxPrice: cleanNumber(params.get('max_price')),
     discountMin: cleanNumber(params.get('discount')),
     colors: cleanList(params.get('colors')),
-    fabrics: cleanList(params.get('fabrics')),
+    attributes,
     occasions: cleanList(params.get('occasions')),
     inStock: params.get('instock') !== '0',
   };
@@ -66,7 +77,10 @@ export function plpStateToParams(state: PlpFilterState): URLSearchParams {
   if (state.maxPrice) params.set('max_price', state.maxPrice);
   if (state.discountMin) params.set('discount', state.discountMin);
   if (state.colors.length) params.set('colors', state.colors.join(','));
-  if (state.fabrics.length) params.set('fabrics', state.fabrics.join(','));
+  for (const key of ATTRIBUTE_KEYS) {
+    const values = state.attributes[key] || [];
+    if (values.length) params.set(key, values.join(','));
+  }
   if (state.occasions.length) params.set('occasions', state.occasions.join(','));
   if (!state.inStock) params.set('instock', '0');
   return params;
@@ -85,7 +99,9 @@ export function buildProductQuery(
     max_price: state.maxPrice || undefined,
     discount_min: state.discountMin || undefined,
     color: state.colors.length ? state.colors.join(',') : undefined,
-    fabric: state.fabrics.length ? state.fabrics.join(',') : undefined,
+    ...Object.fromEntries(
+      ATTRIBUTE_KEYS.map(key => [key, (state.attributes[key] || []).join(',') || undefined]),
+    ),
     occasion: state.occasions.length ? state.occasions.join(',') : undefined,
     availability: state.inStock ? 'in_stock' : undefined,
     page: extra.page,
@@ -133,8 +149,15 @@ export function activePlpChips(state: PlpFilterState): PlpChip[] {
   for (const color of state.colors) {
     chips.push({ key: `color:${color}`, label: color, next: { ...state, colors: state.colors.filter(item => item !== color) } });
   }
-  for (const fabric of state.fabrics) {
-    chips.push({ key: `fabric:${fabric}`, label: fabric, next: { ...state, fabrics: state.fabrics.filter(item => item !== fabric) } });
+  for (const group of ATTRIBUTE_KEYS) {
+    const values = state.attributes[group] || [];
+    for (const value of values) {
+      chips.push({
+        key: `attr:${group}:${value}`,
+        label: value,
+        next: { ...state, attributes: { ...state.attributes, [group]: values.filter(item => item !== value) } },
+      });
+    }
   }
   for (const occasion of state.occasions) {
     chips.push({ key: `occasion:${occasion}`, label: occasion, next: { ...state, occasions: state.occasions.filter(item => item !== occasion) } });
@@ -147,5 +170,5 @@ export function activePlpChips(state: PlpFilterState): PlpChip[] {
 
 export function clearedPlpState(state: PlpFilterState): PlpFilterState {
   // Sort survives "clear all" (matches Nykaa) — it orders results, it does not narrow them.
-  return { ...DEFAULT_PLP_STATE, sort: state.sort };
+  return { ...DEFAULT_PLP_STATE, sort: state.sort, attributes: {} };
 }
