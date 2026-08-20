@@ -28,9 +28,19 @@ import {
   resolveProductVariant,
   resolveVariantId,
 } from '@/lib/variants';
+import { ATTRIBUTE_KEYS } from '@/features/catalog/plpFilters';
 import { useApp } from '@/store/AppContext';
 import { SpinViewer } from '@/ui/components';
 import type { Product, ProductReview } from '@/types';
+
+// Keys the standalone `specifications` tail must never restate: the seven typed
+// attributes (shared with the PLP sidebar filters — same vocabulary, one source of
+// truth) plus Occasion, which the attrs box above already renders from `p.occasions`.
+// Suppressed unconditionally, even when the typed attribute is null for this product —
+// a null typed attribute means "no row", not "fall back to the free-form spec value"
+// (that free-form value is exactly the untrustworthy fixture text a typed attribute
+// left null to avoid repeating, e.g. an `Origin` string that doesn't hold for every saree).
+const SPECS_COVERED_BY_TYPED_ROWS = new Set<string>([...ATTRIBUTE_KEYS, 'occasion']);
 
 export function ProductDetail() {
   const { id } = useParams<{ gender: string; id: string }>();
@@ -487,13 +497,19 @@ export function ProductDetail() {
             </div>
           </div>
 
-          {!!p.specifications && Object.keys(p.specifications).length > 0 && (
-            <div className="pd-spec-table">
-              {Object.entries(p.specifications).map(([key, value]) => (
-                <div key={key}><span>{key}</span><strong>{value}</strong></div>
-              ))}
-            </div>
-          )}
+          {(() => {
+            const extraSpecs = Object.entries(p.specifications || {}).filter(
+              ([key]) => !SPECS_COVERED_BY_TYPED_ROWS.has(key.toLowerCase()),
+            );
+            if (!extraSpecs.length) return null;
+            return (
+              <div className="pd-spec-table">
+                {extraSpecs.map(([key, value]) => (
+                  <div key={key}><span>{key}</span><strong>{value}</strong></div>
+                ))}
+              </div>
+            );
+          })()}
 
           <div className="pd-review-panel" id="reviews">
             <div className="pd-review-head">
