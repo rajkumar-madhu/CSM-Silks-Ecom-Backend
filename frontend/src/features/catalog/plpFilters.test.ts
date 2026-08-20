@@ -133,8 +133,20 @@ describe('attribute filters', () => {
     expect(plpStateToParams(parsed).get('fabrics')).toBeNull();
   });
 
-  it('ignores unknown attribute keys', () => {
-    expect(parsePlpParams(new URLSearchParams('bogus=x')).attributes).toEqual({});
+  it('accepts an attribute key outside ATTRIBUTE_KEYS and round-trips it', () => {
+    // Simulates the backend adding an 8th attribute group (e.g. `pattern`) that the frontend
+    // has not been told about by name — it must still filter, not silently no-op (C1).
+    const parsed = parsePlpParams(new URLSearchParams('pattern=ikat'));
+    expect(parsed.attributes).toEqual({ pattern: ['ikat'] });
+    const params = plpStateToParams(parsed);
+    expect(params.get('pattern')).toBe('ikat');
+    expect(parsePlpParams(params).attributes).toEqual(parsed.attributes);
+  });
+
+  it('still ignores known non-attribute params for the purposes of attribute parsing', () => {
+    // category/sort/rating/etc. are reserved names, never swept into `attributes`.
+    const parsed = parsePlpParams(new URLSearchParams('category=bridal&sort=newest&rating=4'));
+    expect(parsed.attributes).toEqual({});
   });
 
   it('drops empty attribute groups rather than emitting blank params', () => {

@@ -2,9 +2,19 @@
 // single source of truth: parse/serialize must round-trip so links are shareable and
 // back/forward navigation restores the exact view.
 
-// Must match ATTRIBUTE_PARAMS in backend/catalog/selectors.py.
+// Must match ATTRIBUTE_PARAMS in backend/catalog/selectors.py. Kept for the legacy `?fabrics=`
+// alias and anywhere a known-key list is genuinely required (it is NOT used to gate which URL
+// params are treated as attribute groups any more — see RESERVED_PARAM_KEYS below).
 export const ATTRIBUTE_KEYS = ['fabric', 'weave', 'zari', 'border', 'pallu', 'work', 'origin'] as const;
 export type AttributeKey = (typeof ATTRIBUTE_KEYS)[number];
+
+// Every non-attribute query param this module reads. Any URL param NOT in this set is treated
+// as an attribute-shaped group (e.g. `?pattern=ikat`), so a new attribute group the backend adds
+// (see `_attribute_groups` in backend/catalog/views.py) round-trips through the URL without a
+// frontend deploy. `fabrics` is the pre-vocabulary alias for `fabric`, folded in separately below.
+const RESERVED_PARAM_KEYS = new Set([
+  'category', 'sort', 'rating', 'min_price', 'max_price', 'discount', 'colors', 'occasions', 'instock', 'fabrics',
+]);
 
 export interface PlpFilterState {
   category: string;
@@ -48,11 +58,15 @@ function cleanList(value: string | null): string[] {
 export function parsePlpParams(params: URLSearchParams): PlpFilterState {
   const sort = params.get('sort') || '';
   const attributes: Record<string, string[]> = {};
-  for (const key of ATTRIBUTE_KEYS) {
-    // ?fabrics= is the pre-vocabulary param name; accept it, re-serialize as ?fabric=.
-    const raw = params.get(key) ?? (key === 'fabric' ? params.get('fabrics') : null);
-    const values = cleanList(raw);
+  for (const key of new Set(params.keys())) {
+    if (RESERVED_PARAM_KEYS.has(key)) continue;
+    const values = cleanList(params.get(key));
     if (values.length) attributes[key] = values;
+  }
+  // ?fabrics= is the pre-vocabulary param name; accept it, re-serialize as ?fabric=.
+  if (!attributes.fabric) {
+    const legacyFabric = cleanList(params.get('fabrics'));
+    if (legacyFabric.length) attributes.fabric = legacyFabric;
   }
   return {
     category: (params.get('category') || '').trim().toLowerCase(),
@@ -77,8 +91,7 @@ export function plpStateToParams(state: PlpFilterState): URLSearchParams {
   if (state.maxPrice) params.set('max_price', state.maxPrice);
   if (state.discountMin) params.set('discount', state.discountMin);
   if (state.colors.length) params.set('colors', state.colors.join(','));
-  for (const key of ATTRIBUTE_KEYS) {
-    const values = state.attributes[key] || [];
+  for (const [key, values] of Object.entries(state.attributes)) {
     if (values.length) params.set(key, values.join(','));
   }
   if (state.occasions.length) params.set('occasions', state.occasions.join(','));
@@ -100,7 +113,9 @@ export function buildProductQuery(
     discount_min: state.discountMin || undefined,
     color: state.colors.length ? state.colors.join(',') : undefined,
     ...Object.fromEntries(
-      ATTRIBUTE_KEYS.map(key => [key, (state.attributes[key] || []).join(',') || undefined]),
+      Object.entries(state.attributes)
+        .filter(([, values]) => values.length)
+        .map(([key, values]) => [key, values.join(',')]),
     ),
     occasion: state.occasions.length ? state.occasions.join(',') : undefined,
     availability: state.inStock ? 'in_stock' : undefined,
@@ -153,7 +168,7 @@ export function activePlpChips(state: PlpFilterState): PlpChip[] {
   for (const color of state.colors) {
     chips.push({ key: `color:${color}`, label: color, next: { ...state, colors: state.colors.filter(item => item !== color) } });
   }
-  for (const group of ATTRIBUTE_KEYS) {
+  for (const group of Object.keys(state.attributes)) {
     const values = state.attributes[group] || [];
     for (const value of values) {
       chips.push({

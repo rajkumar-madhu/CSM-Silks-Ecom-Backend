@@ -26,6 +26,12 @@
   flex-shrink: 0;
 }
 
+/* Hidden on desktop, where plp-aside is the filter UI; shown as a fixed bottom bar below the
+   860px breakpoint once plp-aside hides itself (see the media query below). */
+.plp-mobile-bar {
+  display: none;
+}
+
 @media (max-width: 860px) {
   /* FilterSidebar is rendered a second time inside plp-drawer-body,
      opened by the "Filter" button in plp-mobile-bar — that drawer is
@@ -34,6 +40,40 @@
      elsewhere in commerce.css (and tokens.css's --bp-lg). */
   .plp-aside {
     display: none;
+  }
+
+  /* .plp-aside collapses above, so below this breakpoint plp-mobile-bar (the Sort/Filter
+     launcher for plp-drawer/plp-sheet) is the only reachable filter entry point — pin it to
+     the bottom of the viewport so it isn't buried under an infinite-scroll grid. */
+  .plp-mobile-bar {
+    display: flex;
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 650;
+    gap: 10px;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .plp-mobile-bar button {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .plp-mobile-bar button:active {
+    border-color: var(--gold);
+    color: var(--gold);
   }
 }
 
