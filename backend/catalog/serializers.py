@@ -212,6 +212,7 @@ class ProductDetailSerializer(ProductListSerializer):
     variants = ProductVariantSerializer(many=True, read_only=True)
     image_records = ProductImageSerializer(source="images", many=True, read_only=True)
     reviews = serializers.SerializerMethodField()
+    attributes = serializers.SerializerMethodField()
 
     class Meta(ProductListSerializer.Meta):
         fields = ProductListSerializer.Meta.fields + [
@@ -224,9 +225,44 @@ class ProductDetailSerializer(ProductListSerializer):
             "variants",
             "image_records",
             "reviews",
+            "attributes",
             "created_at",
             "updated_at",
         ]
+
+    def get_attributes(self, obj) -> list[dict]:
+        """Typed spec rows for the PDP. Null attributes are omitted rather than
+        rendered as blanks — a table of dashes reads as missing data."""
+        rows = [
+            {"key": key, "label": label, "value": getattr(obj, key).label}
+            for key, label in (
+                ("fabric", "Fabric"),
+                ("weave", "Weave"),
+                ("zari", "Zari"),
+                ("border", "Border"),
+                ("pallu", "Pallu"),
+                ("work", "Work"),
+                ("origin", "Origin"),
+            )
+            if getattr(obj, f"{key}_id")
+        ]
+        if obj.silk_mark_certified:
+            rows.append({"key": "silk_mark", "label": "Authenticity", "value": "Silk Mark certified"})
+        variant = obj.default_variant
+        if variant:
+            if variant.length_meters:
+                rows.append({"key": "saree_length", "label": "Saree Length", "value": f"{variant.length_meters} m"})
+            if variant.blouse_length_meters:
+                rows.append({"key": "blouse_length", "label": "Blouse Length", "value": f"{variant.blouse_length_meters} m"})
+            rows.append({
+                "key": "blouse_piece", "label": "Blouse Piece",
+                "value": "Included" if variant.blouse_included else "Not included",
+            })
+            if variant.weight_grams:
+                rows.append({"key": "weight", "label": "Weight", "value": f"{variant.weight_grams} g"})
+            if variant.care_instructions:
+                rows.append({"key": "care", "label": "Wash Care", "value": variant.care_instructions})
+        return rows
 
     def get_reviews(self, obj: Product) -> list[dict]:
         reviews = obj.reviews.filter(is_published=True).select_related("user")[:10]

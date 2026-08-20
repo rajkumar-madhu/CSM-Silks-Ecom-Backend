@@ -151,16 +151,30 @@ export function ProductDetail() {
   const maxQty = Math.max(1, Math.min(activeStock || 1, 10));
 
   const attrs = (() => {
+    if (p.gender !== 'men') {
+      // Sarees: the server sends typed rows, already including Border, Pallu, Weight
+      // and Saree Length. No invented fallbacks — a saree with no recorded zari shows
+      // no Zari row rather than a guessed "Gold Zari".
+      const rows: Array<[string, string]> = (p.attributes || []).map(
+        row => [row.label, row.value] as [string, string],
+      );
+      if ((p.occasions || []).length) rows.push(['Occasion', (p.occasions || []).join(' / ')]);
+      if (p.gender === 'women') rows.push(['House finishing', 'Blouse stitching + fall/pico at checkout']);
+      return rows;
+    }
+
     const length = activeVariant?.length_meters || p.length_meters;
     const spec = p.specifications || {};
-    const rows: Array<[string, string]> = p.gender === 'men'
-      ? [['Material', activeVariant?.fabric || 'Pure Silk'], ['Zari', activeVariant?.zari_type || 'Gold Zari'], ['Size', activeVariant?.size || selectedSize || 'S to 5XL'], ['Care', activeVariant?.care_instructions || 'Dry Clean Only']]
-      : [['Fabric', activeVariant?.fabric || 'Pure Silk'], ['Zari', activeVariant?.zari_type || 'Gold Zari'], ['Occasion', (p.occasions || []).join(' / ') || 'Bridal / Festive'], ['Blouse Piece', activeVariant?.blouse_included ? 'Included' : 'Not included']];
+    const rows: Array<[string, string]> = [
+      ['Material', activeVariant?.fabric || 'Pure Silk'],
+      ['Zari', activeVariant?.zari_type || 'Gold Zari'],
+      ['Size', activeVariant?.size || selectedSize || 'S to 5XL'],
+      ['Care', activeVariant?.care_instructions || 'Dry Clean Only'],
+    ];
     if (length) rows.push(['Length', `${length} m`]);
     for (const key of ['Weight', 'Border', 'Pallu'] as const) {
       if (spec[key]) rows.push([key, spec[key]]);
     }
-    if (p.gender === 'women') rows.push(['House finishing', 'Blouse stitching + fall/pico at checkout']);
     return rows;
   })();
 

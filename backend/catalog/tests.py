@@ -933,3 +933,29 @@ class AdminAttributeOptionTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("fabric", response.json())
+
+
+class ProductDetailAttributeTests(TestCase):
+    def test_detail_lists_typed_attributes_and_omits_nulls(self):
+        from catalog.models import AttributeOption, Category, Product, ProductVariant
+
+        client = APIClient()
+        category = Category.objects.create(name="Kanjivaram", slug="kanjivaram", gender="women", product_type="saree")
+        product = Product.objects.create(
+            name="Royal", slug="royal", category=category, gender="women", base_price=100, base_mrp=200,
+            fabric=AttributeOption.objects.get(key="fabric", value_slug="kanjivaram-silk"),
+            zari=AttributeOption.objects.get(key="zari", value_slug="real-gold-zari"),
+            silk_mark_certified=True,
+        )
+        ProductVariant.objects.create(
+            product=product, sku="ROY-1", price=100, mrp=200, stock_qty=2,
+            length_meters="6.30", blouse_included=True,
+        )
+        rows = client.get("/api/products/royal").json()["attributes"]
+        by_key = {row["key"]: row["value"] for row in rows}
+        self.assertEqual(by_key["fabric"], "Kanjivaram Silk")
+        self.assertEqual(by_key["zari"], "Real Gold Zari")
+        self.assertEqual(by_key["silk_mark"], "Silk Mark certified")
+        self.assertNotIn("weave", by_key)   # null — omitted, not shown blank
+        self.assertNotIn("origin", by_key)
+        self.assertEqual(by_key["saree_length"], "6.30 m")

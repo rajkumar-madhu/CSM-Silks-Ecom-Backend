@@ -86,6 +86,7 @@ export interface Product {
   delivery_max_days?: number;
   key_highlights?: string[];
   specifications?: Record<string, string>;
+  attributes?: Array<{ key: string; label: string; value: string }>;
   serviceable_pin_codes?: string[];
   discount_percent?: number;
   avg_rating?: number | string;
