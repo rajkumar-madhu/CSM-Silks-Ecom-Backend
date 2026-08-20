@@ -1,0 +1,12 @@
+.plp-filter-more {
+  background: none;
+  border: 0;
+  color: var(--gold, #c4923a);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  padding: 6px 0 0;
+  text-align: left;
+}
+.plp-filter-more:hover { text-decoration: underline; }

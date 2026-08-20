@@ -125,6 +125,10 @@ export interface PlpChip {
   key: string;
   label: string;
   next: PlpFilterState;
+  // Present only for attribute chips. plpFilters.ts is a pure module with no access to facet
+  // labels, so `label` above is the raw slug; a render layer that has the facets can use this
+  // to look up the human-readable option label instead of showing the slug.
+  attr?: { group: string; slug: string };
 }
 
 export function activePlpChips(state: PlpFilterState): PlpChip[] {
@@ -156,6 +160,7 @@ export function activePlpChips(state: PlpFilterState): PlpChip[] {
         key: `attr:${group}:${value}`,
         label: value,
         next: { ...state, attributes: { ...state.attributes, [group]: values.filter(item => item !== value) } },
+        attr: { group, slug: value },
       });
     }
   }

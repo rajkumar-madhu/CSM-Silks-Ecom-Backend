@@ -25,6 +25,15 @@ export function PlpSortBar({ title, total, loading, facets, state, liveChip, onC
   const chips = activePlpChips(state);
   const sorts = facets?.sorts?.length ? facets.sorts : FALLBACK_SORTS;
 
+  // Attribute chips carry the raw slug as `label` (plpFilters.ts is pure and has no facet
+  // access); resolve it to the human-readable option label here, where facets are in scope.
+  const attributeLabels = new Map<string, string>();
+  for (const group of facets?.attributes || []) {
+    for (const option of group.options) {
+      attributeLabels.set(`${group.key}:${option.slug}`, option.label);
+    }
+  }
+
   return (
     <div className="plp-sortbar-wrap">
       <div className="plp-sortbar">
@@ -46,12 +55,15 @@ export function PlpSortBar({ title, total, loading, facets, state, liveChip, onC
       </div>
       {chips.length > 0 && (
         <div className="plp-chip-row">
-          {chips.map(chip => (
-            <button key={chip.key} type="button" className="plp-chip" onClick={() => onChange(chip.next)}>
-              {chip.label}
-              <X size={12} />
-            </button>
-          ))}
+          {chips.map(chip => {
+            const label = chip.attr ? attributeLabels.get(`${chip.attr.group}:${chip.attr.slug}`) || chip.label : chip.label;
+            return (
+              <button key={chip.key} type="button" className="plp-chip" onClick={() => onChange(chip.next)}>
+                {label}
+                <X size={12} />
+              </button>
+            );
+          })}
           <button type="button" className="plp-chip plp-chip--clear" onClick={() => onChange(clearedPlpState(state))}>
             Clear all
           </button>

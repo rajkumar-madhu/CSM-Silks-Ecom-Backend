@@ -5,7 +5,7 @@ import {
   toggleListValue,
   type PlpFilterState,
 } from '../plpFilters';
-import type { CatalogFacets } from '@/types';
+import type { CatalogAttributeGroup, CatalogFacets } from '@/types';
 
 interface FilterSidebarProps {
   facets: CatalogFacets | null;
@@ -63,6 +63,45 @@ function CheckRow({
   );
 }
 
+const VISIBLE_OPTIONS = 8;
+
+function AttributeGroup({
+  group,
+  state,
+  onChange,
+}: {
+  group: CatalogAttributeGroup;
+  state: PlpFilterState;
+  onChange: (next: PlpFilterState) => void;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const selected = state.attributes[group.key] || [];
+  const visible = showAll ? group.options : group.options.slice(0, VISIBLE_OPTIONS);
+  return (
+    <FilterGroup title={group.label}>
+      {visible.map(option => (
+        <CheckRow
+          key={option.slug}
+          checked={selected.includes(option.slug)}
+          label={option.label}
+          count={option.count}
+          onToggle={() =>
+            onChange({
+              ...state,
+              attributes: { ...state.attributes, [group.key]: toggleListValue(selected, option.slug) },
+            })
+          }
+        />
+      ))}
+      {group.options.length > VISIBLE_OPTIONS && (
+        <button type="button" className="plp-filter-more" onClick={() => setShowAll(value => !value)}>
+          {showAll ? 'Show less' : `Show all ${group.options.length}`}
+        </button>
+      )}
+    </FilterGroup>
+  );
+}
+
 export function FilterSidebar({ facets, state, onChange }: FilterSidebarProps) {
   const activeCount =
     (state.category ? 1 : 0) +
@@ -70,14 +109,13 @@ export function FilterSidebar({ facets, state, onChange }: FilterSidebarProps) {
     (state.discountMin ? 1 : 0) +
     (state.rating ? 1 : 0) +
     state.colors.length +
-    state.fabrics.length +
+    Object.values(state.attributes).reduce((total, values) => total + values.length, 0) +
     state.occasions.length +
     (state.inStock ? 0 : 1);
 
   const categories = facets?.categories || [];
   const categoryCounts = facets?.category_counts;
   const colors = facets?.colors || [];
-  const fabricRows = facets?.fabric_counts || (facets?.fabrics || []).map(name => ({ name, count: undefined as number | undefined }));
   const occasionRows = facets?.occasion_counts || (facets?.occasions || []).map(name => ({ name, count: undefined as number | undefined }));
 
   return (
@@ -141,19 +179,9 @@ export function FilterSidebar({ facets, state, onChange }: FilterSidebarProps) {
         </FilterGroup>
       )}
 
-      {fabricRows.length > 0 && (
-        <FilterGroup title="Fabric">
-          {fabricRows.map(fabric => (
-            <CheckRow
-              key={fabric.name}
-              checked={state.fabrics.includes(fabric.name)}
-              label={fabric.name}
-              count={fabric.count}
-              onToggle={() => onChange({ ...state, fabrics: toggleListValue(state.fabrics, fabric.name) })}
-            />
-          ))}
-        </FilterGroup>
-      )}
+      {(facets?.attributes || []).map(group => (
+        <AttributeGroup key={group.key} group={group} state={state} onChange={onChange} />
+      ))}
 
       {occasionRows.length > 0 && (
         <FilterGroup title="Occasion" defaultOpen={false}>
