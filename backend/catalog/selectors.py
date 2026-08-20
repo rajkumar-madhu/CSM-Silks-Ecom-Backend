@@ -14,6 +14,11 @@ def _split_multi(value) -> list[str]:
     return [item.strip() for item in str(value).split(",") if item.strip()]
 
 
+# Attribute params accepted on /api/products, matched against AttributeOption.value_slug.
+# `fabric` is listed first because it also accepts the human label for back-compat.
+ATTRIBUTE_PARAMS = ("fabric", "weave", "zari", "border", "pallu", "work", "origin")
+
+
 def product_base_queryset() -> QuerySet[Product]:
     return (
         Product.objects.select_related("category", "fabric", "weave", "zari", "border", "pallu", "work", "origin")
@@ -38,7 +43,6 @@ def public_products(params) -> QuerySet[Product]:
     min_price = params.get("min_price")
     max_price = params.get("max_price")
     color = params.get("color")
-    fabric = params.get("fabric")
     occasion = params.get("occasion")
     rating = params.get("rating")
     discount_min = params.get("discount_min")
@@ -70,11 +74,17 @@ def public_products(params) -> QuerySet[Product]:
         for value in _split_multi(color):
             color_q |= Q(variants__color_name__icontains=value) | Q(variants__color_hex__iexact=value)
         qs = qs.filter(color_q).distinct()
-    if fabric:
-        fabric_q = Q()
-        for value in _split_multi(fabric):
-            fabric_q |= Q(fabric__label__icontains=value)
-        qs = qs.filter(fabric_q).distinct()
+    for attribute in ATTRIBUTE_PARAMS:
+        values = _split_multi(params.get(attribute))
+        if not values:
+            continue
+        attribute_q = Q()
+        for value in values:
+            attribute_q |= Q(**{f"{attribute}__value_slug__iexact": value})
+            if attribute == "fabric":
+                # Links minted before the controlled vocabulary carry the label.
+                attribute_q |= Q(fabric__label__iexact=value)
+        qs = qs.filter(attribute_q)
     if occasion:
         occasion_q = Q()
         for value in _split_multi(occasion):

@@ -548,3 +548,50 @@ class SareeAttributeBackfillTests(TestCase):
         data = ProductVariantSerializer(variant).data
         self.assertEqual(data["fabric"], "")
         self.assertEqual(data["zari_type"], "")
+
+
+class SareeAttributeFilterTests(TestCase):
+    def setUp(self):
+        from catalog.models import AttributeOption, Category, Product, ProductVariant
+
+        self.client = APIClient()
+        category = Category.objects.create(name="Kanjivaram", slug="kanjivaram", gender="women", product_type="saree")
+        kanjivaram = AttributeOption.objects.get(key="fabric", value_slug="kanjivaram-silk")
+        patola = AttributeOption.objects.get(key="fabric", value_slug="patola-silk")
+        gold = AttributeOption.objects.get(key="zari", value_slug="real-gold-zari")
+        silver = AttributeOption.objects.get(key="zari", value_slug="silver-zari")
+
+        for slug, fabric, zari in [
+            ("a", kanjivaram, gold),
+            ("b", kanjivaram, silver),
+            ("c", patola, gold),
+        ]:
+            product = Product.objects.create(
+                name=slug.upper(), slug=slug, category=category, gender="women",
+                base_price=100, base_mrp=200, fabric=fabric, zari=zari,
+            )
+            ProductVariant.objects.create(product=product, sku=f"SKU-{slug}", price=100, mrp=200, stock_qty=3)
+
+    def test_single_attribute_filters(self):
+        response = self.client.get("/api/products", {"gender": "women", "fabric": "kanjivaram-silk"})
+        self.assertEqual(response.json()["total"], 2)
+
+    def test_multi_value_within_a_group_is_a_union(self):
+        response = self.client.get("/api/products", {"gender": "women", "fabric": "kanjivaram-silk,patola-silk"})
+        self.assertEqual(response.json()["total"], 3)
+
+    def test_across_groups_is_an_intersection(self):
+        response = self.client.get(
+            "/api/products", {"gender": "women", "fabric": "kanjivaram-silk", "zari": "silver-zari"}
+        )
+        self.assertEqual(response.json()["total"], 1)
+
+    def test_legacy_label_form_still_filters(self):
+        response = self.client.get("/api/products", {"gender": "women", "fabric": "Kanjivaram Silk"})
+        self.assertEqual(response.json()["total"], 2)
+
+    def test_unknown_slug_is_ignored_not_an_error(self):
+        # Shareable links must not rot when a merchandiser retires an option.
+        response = self.client.get("/api/products", {"gender": "women", "zari": "retired-option"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["total"], 0)
