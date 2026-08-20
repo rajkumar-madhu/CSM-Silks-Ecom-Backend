@@ -658,6 +658,50 @@ class SareeFacetAttributeTests(TestCase):
     def test_menswear_scope_returns_no_attribute_groups(self):
         self.assertEqual(self._groups({"gender": "men"}), {})
 
+    def test_gender_women_products_in_non_saree_category_yield_no_attribute_groups(self):
+        # Regression pin: scope must come from Category.product_type, not from
+        # inferring "gender=women means saree" — the exact coupling that field's
+        # docstring exists to prevent. A women's listing with zero saree-category
+        # products (e.g. all kurtis) must not surface Fabric/Zari/etc groups.
+        from catalog.models import AttributeOption, Category, Product, ProductVariant
+
+        Product.objects.filter(category=self.saree_cat).delete()
+        kurti_cat = Category.objects.create(
+            name="Kurtis", slug="kurtis", gender="women", product_type="other"
+        )
+        kanjivaram = AttributeOption.objects.get(key="fabric", value_slug="kanjivaram-silk")
+        kurti = Product.objects.create(
+            name="Kurti", slug="kurti-1", category=kurti_cat, gender="women",
+            base_price=100, base_mrp=200, fabric=kanjivaram,
+        )
+        ProductVariant.objects.create(product=kurti, sku="SKU-kurti", price=100, mrp=200, stock_qty=3)
+        self.assertEqual(self._groups({"gender": "women"}), {})
+
+    def test_parked_and_inactive_options_are_excluded_from_counts(self):
+        # is_filterable=False parks an unrecognised value; is_active=False retires one.
+        # Neither should ever reach the sidebar or inflate/appear in another option's count.
+        from catalog.models import AttributeOption, Product, ProductVariant
+
+        parked = AttributeOption.objects.create(
+            key="fabric", value_slug="parked-fabric", label="Parked Fabric",
+            sort_order=99, is_filterable=False, is_active=True,
+        )
+        retired = AttributeOption.objects.create(
+            key="fabric", value_slug="retired-fabric", label="Retired Fabric",
+            sort_order=98, is_filterable=True, is_active=False,
+        )
+        for slug, option in [("parked-product", parked), ("retired-product", retired)]:
+            product = Product.objects.create(
+                name=slug, slug=slug, category=self.saree_cat, gender="women",
+                base_price=100, base_mrp=200, fabric=option,
+            )
+            ProductVariant.objects.create(product=product, sku=f"SKU-{slug}", price=100, mrp=200, stock_qty=3)
+
+        groups = self._groups({"gender": "women"})
+        slugs = {option["slug"] for option in groups["fabric"]["options"]}
+        self.assertNotIn("parked-fabric", slugs)
+        self.assertNotIn("retired-fabric", slugs)
+
     def test_legacy_facet_fields_are_unchanged(self):
         data = self.client.get("/api/catalog/facets", {"gender": "women"}).json()
         for key in ("categories", "colors", "fabrics", "occasions", "price", "sorts", "total",

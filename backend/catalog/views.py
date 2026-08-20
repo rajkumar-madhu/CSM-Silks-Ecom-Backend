@@ -75,17 +75,14 @@ class CollectionListView(APIView):
         return Response(CollectionSerializer(collections, many=True).data)
 
 
-def _is_saree_scope(params) -> bool:
-    """Which attribute panel applies — a property of the catalogue, not the URL."""
-    category = params.get("category")
-    if category:
-        return Category.objects.filter(slug=category, product_type=Category.ProductType.SAREE).exists()
-    return (params.get("gender") or "") == "women"
-
-
 def _attribute_groups(params) -> list[dict]:
-    if not _is_saree_scope(params):
-        return []
+    """Attribute-facet groups, scoped to saree-category products by construction.
+
+    Deliberately NOT gated on gender or a `category` param guess: `Category.product_type`
+    is the source of truth for "is this a saree" (see the comment on that field), so a
+    gender=women listing of, say, kurtis correctly yields zero saree-category products
+    here and therefore no groups — no separate scope check needed.
+    """
     labels = dict(AttributeOption.Key.choices)
     groups = []
     for key in ATTRIBUTE_PARAMS:
@@ -95,6 +92,7 @@ def _attribute_groups(params) -> list[dict]:
         trimmed.pop(key, None)
         rows = (
             public_products(trimmed)
+            .filter(category__product_type=Category.ProductType.SAREE)
             .filter(**{f"{key}__is_filterable": True, f"{key}__is_active": True})
             .order_by()
             .values(f"{key}__value_slug", f"{key}__label", f"{key}__sort_order")
