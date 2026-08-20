@@ -41,12 +41,19 @@ def backfill(apps, schema_editor):
             print(f"  - {line}")
 
 
-def noop_reverse(apps, schema_editor):
-    """Reversing drops the FK values; the source strings still exist until 0008."""
+def unset_attributes(apps, schema_editor):
+    """NOT a no-op: this nulls the four typed FKs this migration populated. It does NOT
+    restore the pre-backfill state — the free-text source values (ProductVariant.fabric /
+    zari_type) that `backfill` read from are untouched by this migration in either
+    direction, but any admin edits made to the typed FKs after this migration ran are
+    lost, silently and permanently, the moment this reverse migration runs. There is no
+    rollback here that gets you back to where you started; treat reversing this migration
+    as destructive.
+    """
     Product = apps.get_model("catalog", "Product")
     Product.objects.update(fabric=None, zari=None, border=None, work=None)
 
 
 class Migration(migrations.Migration):
     dependencies = [("catalog", "0006_product_border_product_fabric_product_origin_and_more")]
-    operations = [migrations.RunPython(backfill, noop_reverse)]
+    operations = [migrations.RunPython(backfill, unset_attributes)]
