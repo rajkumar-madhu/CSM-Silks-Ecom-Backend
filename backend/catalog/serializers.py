@@ -3,11 +3,12 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils.text import slugify
 from rest_framework import serializers
 from inventory.models import StockLedger
 
-from .models import Category, Collection, Product, ProductImage, ProductVariant
+from .models import AttributeOption, Category, Collection, Product, ProductImage, ProductVariant
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -276,7 +277,22 @@ class AdminProductWriteSerializer(serializers.ModelSerializer):
             "is_active",
             "is_featured",
             "is_gi_tagged",
+            "fabric",
+            "weave",
+            "zari",
+            "border",
+            "pallu",
+            "work",
+            "origin",
+            "silk_mark_certified",
         ]
+
+
+class AdminAttributeOptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AttributeOption
+        fields = ["id", "key", "value_slug", "label", "sort_order", "is_filterable", "is_active"]
+        read_only_fields = ["id"]
 
 
 def _split_text(value) -> list[str]:
@@ -346,6 +362,27 @@ class AdminProductQuickCreateSerializer(serializers.Serializer):
     exchange_available = serializers.BooleanField(default=True)
     return_days = serializers.IntegerField(min_value=0, max_value=60, default=15)
 
+    def _resolve_option(self, key: str, value: str):
+        value = (value or "").strip()
+        if not value:
+            return None
+        option = AttributeOption.objects.filter(
+            key=key, is_active=True
+        ).filter(Q(value_slug__iexact=value) | Q(label__iexact=value)).first()
+        if option is None:
+            raise serializers.ValidationError(
+                {key: f"Unknown {key}. Add it under Admin > Attribute options first, then retry."}
+            )
+        return option
+
+    def validate_fabric(self, value):
+        self._resolve_option("fabric", value)
+        return value
+
+    def validate_zari_type(self, value):
+        self._resolve_option("zari", value)
+        return value
+
     def validate(self, attrs):
         if attrs["mrp"] < attrs["price"]:
             raise serializers.ValidationError({"mrp": "MRP must be greater than or equal to selling price."})
@@ -392,7 +429,11 @@ class AdminProductQuickCreateSerializer(serializers.Serializer):
 
         tags = validated_data.get("tags") or _split_text(validated_data.get("tags_text"))
         occasions = validated_data.get("occasions") or _split_text(validated_data.get("occasions_text"))
-        fabric = validated_data.get("fabric", "").strip()
+        fabric_option = self._resolve_option("fabric", validated_data.get("fabric", ""))
+        zari_option = self._resolve_option("zari", validated_data.get("zari_type", ""))
+        # Canonical label, not the raw input, so derived text (tags, key highlights,
+        # specifications) can't reintroduce the free-text drift this feature closes.
+        fabric = fabric_option.label if fabric_option else ""
         color_name = validated_data.get("color_name", "").strip()
         if fabric and fabric not in tags:
             tags.append(fabric)
@@ -413,6 +454,8 @@ class AdminProductQuickCreateSerializer(serializers.Serializer):
             occasions=occasions,
             base_price=price,
             base_mrp=mrp,
+            fabric=fabric_option,
+            zari=zari_option,
             deal_label=validated_data.get("deal_label", ""),
             key_highlights=[
                 item

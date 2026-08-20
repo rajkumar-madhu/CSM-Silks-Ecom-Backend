@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    AdminAttributeOptionDetailView,
+    AdminAttributeOptionListCreateView,
     AdminCategoryListCreateView,
     AdminCollectionListCreateView,
     AdminProductImageListCreateView,
@@ -35,4 +37,6 @@ urlpatterns = [
     path("admin/collections", AdminCollectionListCreateView.as_view()),
     path("admin/variants", AdminVariantListCreateView.as_view()),
     path("admin/variants/<int:variant_id>", AdminVariantDetailView.as_view()),
+    path("admin/attribute-options", AdminAttributeOptionListCreateView.as_view()),
+    path("admin/attribute-options/<int:option_id>", AdminAttributeOptionDetailView.as_view()),
 ]

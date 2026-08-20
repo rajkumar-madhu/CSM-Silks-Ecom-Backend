@@ -24,6 +24,7 @@ from .realtime import (
 )
 from .selectors import ATTRIBUTE_PARAMS, product_base_queryset, public_products
 from .serializers import (
+    AdminAttributeOptionSerializer,
     AdminCategoryWriteSerializer,
     AdminCollectionWriteSerializer,
     AdminProductImageWriteSerializer,
@@ -401,3 +402,40 @@ class AdminProductImageListCreateView(APIView):
         image = serializer.save()
         publish_image_update(image)
         return Response(ProductImageSerializer(image).data, status=status.HTTP_201_CREATED)
+
+
+class AdminAttributeOptionListCreateView(APIView):
+    permission_classes = [IsStaffAdmin]
+
+    def get(self, request):
+        options = AttributeOption.objects.all()
+        key = request.query_params.get("key")
+        if key:
+            options = options.filter(key=key)
+        return Response(AdminAttributeOptionSerializer(options, many=True).data)
+
+    def post(self, request):
+        serializer = AdminAttributeOptionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        option = serializer.save()
+        return Response(AdminAttributeOptionSerializer(option).data, status=status.HTTP_201_CREATED)
+
+
+class AdminAttributeOptionDetailView(APIView):
+    permission_classes = [IsStaffAdmin]
+
+    def patch(self, request, option_id: int):
+        option = get_object_or_404(AttributeOption, id=option_id)
+        serializer = AdminAttributeOptionSerializer(option, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        option = serializer.save()
+        return Response(AdminAttributeOptionSerializer(option).data)
+
+    def delete(self, request, option_id: int):
+        # Soft delete only: Product's seven attribute FKs are on_delete=PROTECT, so a hard
+        # delete of an option still in use raises ProtectedError (unhandled 500). Retiring it
+        # instead drops it from facets/admin choices while products keep pointing at it.
+        option = get_object_or_404(AttributeOption, id=option_id)
+        option.is_active = False
+        option.save(update_fields=["is_active"])
+        return Response(status=status.HTTP_204_NO_CONTENT)

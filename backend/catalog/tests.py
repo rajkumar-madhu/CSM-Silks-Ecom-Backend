@@ -716,3 +716,129 @@ class SareeFacetAttributeTests(TestCase):
         for key in ("categories", "colors", "fabrics", "occasions", "price", "sorts", "total",
                     "category_counts", "fabric_counts", "occasion_counts"):
             self.assertIn(key, data)
+
+
+class AdminAttributeOptionTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.staff = User.objects.create_user(
+            username="attr-staff", email="staff@csm.test", password="pw12345!", is_staff=True
+        )
+
+    def test_listing_options_requires_staff(self):
+        response = self.client.get("/api/admin/attribute-options")
+        self.assertIn(response.status_code, (401, 403))
+
+    def test_staff_can_list_and_filter_by_key(self):
+        self.client.force_authenticate(self.staff)
+        response = self.client.get("/api/admin/attribute-options", {"key": "zari"})
+        self.assertEqual(response.status_code, 200)
+        keys = {row["key"] for row in response.json()}
+        self.assertEqual(keys, {"zari"})
+
+    def test_staff_can_create_a_new_option(self):
+        self.client.force_authenticate(self.staff)
+        response = self.client.post(
+            "/api/admin/attribute-options",
+            {"key": "fabric", "value_slug": "tissue-silk", "label": "Tissue Silk"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(AttributeOption.objects.filter(key="fabric", value_slug="tissue-silk").exists())
+
+    def test_staff_can_patch_an_option(self):
+        self.client.force_authenticate(self.staff)
+        option = AttributeOption.objects.create(key="fabric", value_slug="temp-silk", label="Temp Silk")
+        response = self.client.patch(
+            f"/api/admin/attribute-options/{option.id}", {"label": "Updated Silk"}, format="json"
+        )
+        self.assertEqual(response.status_code, 200)
+        option.refresh_from_db()
+        self.assertEqual(option.label, "Updated Silk")
+
+    def test_delete_soft_deletes_and_survives_product_in_use(self):
+        # DELETE must not hard-delete: Product.fabric is on_delete=PROTECT, so removing a
+        # row a product points at would raise ProtectedError and surface as a 500.
+        category = Category.objects.create(name="Kanjivaram", slug="kanjivaram-delete", gender="women")
+        option = AttributeOption.objects.create(key="fabric", value_slug="in-use-silk", label="In Use Silk")
+        product = Product.objects.create(
+            name="In Use Product",
+            slug="in-use-product",
+            category=category,
+            gender="women",
+            base_price=100,
+            base_mrp=200,
+            fabric=option,
+        )
+        self.client.force_authenticate(self.staff)
+        response = self.client.delete(f"/api/admin/attribute-options/{option.id}")
+        self.assertEqual(response.status_code, 204)
+        option.refresh_from_db()
+        self.assertFalse(option.is_active)
+        product.refresh_from_db()
+        self.assertEqual(product.fabric_id, option.id)
+
+    def test_quick_create_rejects_an_unknown_fabric(self):
+        # Quick-create is where "Pure Kanjivaram Silk" got typed by hand. Close the leak.
+        Category.objects.create(name="Kanjivaram", slug="kanjivaram-unknown", gender="women", product_type="saree")
+        self.client.force_authenticate(self.staff)
+        response = self.client.post(
+            "/api/admin/products/quick-create",
+            {
+                "name": "X",
+                "category_name": "Kanjivaram",
+                "category_slug": "kanjivaram-unknown",
+                "price": "100",
+                "mrp": "200",
+                "fabric": "Invented Silk",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("fabric", response.json())
+
+    def test_quick_create_accepts_a_known_fabric_slug_and_is_findable_via_facet_and_filter(self):
+        Category.objects.create(name="Kanjivaram", slug="kanjivaram-known", gender="women", product_type="saree")
+        self.client.force_authenticate(self.staff)
+        response = self.client.post(
+            "/api/admin/products/quick-create",
+            {
+                "name": "X",
+                "category_name": "Kanjivaram",
+                "category_slug": "kanjivaram-known",
+                "price": "100",
+                "mrp": "200",
+                "fabric": "kanjivaram-silk",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        product = Product.objects.get(name="X")
+        self.assertEqual(product.fabric.value_slug, "kanjivaram-silk")
+
+        # Regression: fabric must be retrievable, not just set — via ?fabric= filter and the facet.
+        filtered = self.client.get("/api/products", {"fabric": "kanjivaram-silk"})
+        self.assertEqual(filtered.status_code, 200)
+        slugs = {item["slug"] for item in filtered.json()["items"]}
+        self.assertIn(product.slug, slugs)
+
+        facets = self.client.get("/api/catalog/facets", {"gender": "women"}).json()
+        self.assertIn("Kanjivaram Silk", facets["fabrics"])
+
+    def test_quick_create_rejects_an_unknown_zari_type(self):
+        Category.objects.create(name="Kanjivaram", slug="kanjivaram-zari", gender="women", product_type="saree")
+        self.client.force_authenticate(self.staff)
+        response = self.client.post(
+            "/api/admin/products/quick-create",
+            {
+                "name": "X",
+                "category_name": "Kanjivaram",
+                "category_slug": "kanjivaram-zari",
+                "price": "100",
+                "mrp": "200",
+                "zari_type": "Invented Zari",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("zari_type", response.json())
