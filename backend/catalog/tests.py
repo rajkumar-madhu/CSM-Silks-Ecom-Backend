@@ -959,3 +959,27 @@ class ProductDetailAttributeTests(TestCase):
         self.assertNotIn("weave", by_key)   # null — omitted, not shown blank
         self.assertNotIn("origin", by_key)
         self.assertEqual(by_key["saree_length"], "6.30 m")
+
+    def test_attribute_labels_covers_null_typed_attributes_too(self):
+        # This is the field the specifications-tail dedup on the PDP is driven off of:
+        # it must list every typed-attribute label `attributes` is responsible for,
+        # even ones this product leaves null (origin, here) — a null typed attribute
+        # still needs its label suppressed from the free-form specifications tail, so
+        # the client can't "rescue" an untrustworthy fixture value like a stale Origin
+        # string just because the typed FK itself is empty.
+        from catalog.models import AttributeOption, Category, Product
+
+        client = APIClient()
+        category = Category.objects.create(
+            name="Kanjivaram Labels", slug="kanjivaram-labels", gender="women", product_type="saree"
+        )
+        product = Product.objects.create(
+            name="Royal Labels", slug="royal-labels", category=category, gender="women",
+            base_price=100, base_mrp=200,
+            fabric=AttributeOption.objects.get(key="fabric", value_slug="kanjivaram-silk"),
+        )
+        self.assertIsNone(product.origin_id)
+        labels = client.get("/api/products/royal-labels").json()["attribute_labels"]
+        self.assertIn("Fabric", labels)
+        self.assertIn("Origin", labels)  # null FK — still listed
+        self.assertIn("Occasion", labels)

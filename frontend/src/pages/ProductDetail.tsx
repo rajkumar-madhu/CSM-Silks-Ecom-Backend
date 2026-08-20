@@ -28,19 +28,9 @@ import {
   resolveProductVariant,
   resolveVariantId,
 } from '@/lib/variants';
-import { ATTRIBUTE_KEYS } from '@/features/catalog/plpFilters';
 import { useApp } from '@/store/AppContext';
 import { SpinViewer } from '@/ui/components';
 import type { Product, ProductReview } from '@/types';
-
-// Keys the standalone `specifications` tail must never restate: the seven typed
-// attributes (shared with the PLP sidebar filters — same vocabulary, one source of
-// truth) plus Occasion, which the attrs box above already renders from `p.occasions`.
-// Suppressed unconditionally, even when the typed attribute is null for this product —
-// a null typed attribute means "no row", not "fall back to the free-form spec value"
-// (that free-form value is exactly the untrustworthy fixture text a typed attribute
-// left null to avoid repeating, e.g. an `Origin` string that doesn't hold for every saree).
-const SPECS_COVERED_BY_TYPED_ROWS = new Set<string>([...ATTRIBUTE_KEYS, 'occasion']);
 
 export function ProductDetail() {
   const { id } = useParams<{ gender: string; id: string }>();
@@ -498,8 +488,13 @@ export function ProductDetail() {
           </div>
 
           {(() => {
+            // `p.attribute_labels` is server-driven and lists every typed-attribute
+            // label — including ones this product leaves null (e.g. a null Origin) —
+            // so a key with a typed home never gets "rescued" back into view here just
+            // because the typed row itself was omitted.
+            const coveredLabels = new Set((p.attribute_labels || []).map(label => label.toLowerCase()));
             const extraSpecs = Object.entries(p.specifications || {}).filter(
-              ([key]) => !SPECS_COVERED_BY_TYPED_ROWS.has(key.toLowerCase()),
+              ([key]) => !coveredLabels.has(key.toLowerCase()),
             );
             if (!extraSpecs.length) return null;
             return (

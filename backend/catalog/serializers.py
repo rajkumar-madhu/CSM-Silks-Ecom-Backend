@@ -208,11 +208,27 @@ class ProductListSerializer(serializers.ModelSerializer):
         return data
 
 
+# The seven typed-attribute FKs `attributes` reports on, keyed by field name. Shared
+# by `get_attributes` (which only emits a row when the FK is populated) and
+# `get_attribute_labels` (which always lists the label, populated or not) so the two
+# can never drift apart into two different vocabularies of "what counts as typed".
+_TYPED_ATTRIBUTE_FIELDS = (
+    ("fabric", "Fabric"),
+    ("weave", "Weave"),
+    ("zari", "Zari"),
+    ("border", "Border"),
+    ("pallu", "Pallu"),
+    ("work", "Work"),
+    ("origin", "Origin"),
+)
+
+
 class ProductDetailSerializer(ProductListSerializer):
     variants = ProductVariantSerializer(many=True, read_only=True)
     image_records = ProductImageSerializer(source="images", many=True, read_only=True)
     reviews = serializers.SerializerMethodField()
     attributes = serializers.SerializerMethodField()
+    attribute_labels = serializers.SerializerMethodField()
 
     class Meta(ProductListSerializer.Meta):
         fields = ProductListSerializer.Meta.fields + [
@@ -226,6 +242,7 @@ class ProductDetailSerializer(ProductListSerializer):
             "image_records",
             "reviews",
             "attributes",
+            "attribute_labels",
             "created_at",
             "updated_at",
         ]
@@ -235,15 +252,7 @@ class ProductDetailSerializer(ProductListSerializer):
         rendered as blanks — a table of dashes reads as missing data."""
         rows = [
             {"key": key, "label": label, "value": getattr(obj, key).label}
-            for key, label in (
-                ("fabric", "Fabric"),
-                ("weave", "Weave"),
-                ("zari", "Zari"),
-                ("border", "Border"),
-                ("pallu", "Pallu"),
-                ("work", "Work"),
-                ("origin", "Origin"),
-            )
+            for key, label in _TYPED_ATTRIBUTE_FIELDS
             if getattr(obj, f"{key}_id")
         ]
         if obj.silk_mark_certified:
@@ -263,6 +272,14 @@ class ProductDetailSerializer(ProductListSerializer):
             if variant.care_instructions:
                 rows.append({"key": "care", "label": "Wash Care", "value": variant.care_instructions})
         return rows
+
+    def get_attribute_labels(self, obj) -> list[str]:
+        """Every label `attributes` is responsible for — including ones this product
+        leaves null — plus Occasion. This is what the PDP's free-form `specifications`
+        tail filters itself against, so a key with a typed home (even an unpopulated
+        one, like a null Origin) never gets "rescued" back into view there. A new typed
+        attribute added to `_TYPED_ATTRIBUTE_FIELDS` shows up here automatically."""
+        return [label for _, label in _TYPED_ATTRIBUTE_FIELDS] + ["Occasion"]
 
     def get_reviews(self, obj: Product) -> list[dict]:
         reviews = obj.reviews.filter(is_published=True).select_related("user")[:10]

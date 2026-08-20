@@ -87,6 +87,7 @@ export interface Product {
   key_highlights?: string[];
   specifications?: Record<string, string>;
   attributes?: Array<{ key: string; label: string; value: string }>;
+  attribute_labels?: string[];
   serviceable_pin_codes?: string[];
   discount_percent?: number;
   avg_rating?: number | string;
