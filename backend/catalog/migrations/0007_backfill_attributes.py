@@ -1,51 +1,30 @@
 from django.db import migrations
+from django.db.models import Prefetch
 
-from ._attribute_backfill import WORK_MAP, ZARI_MAP, resolve_or_park
+from ._attribute_backfill import apply_variant_attributes
 
 
 def backfill(apps, schema_editor):
     AttributeOption = apps.get_model("catalog", "AttributeOption")
+    Product = apps.get_model("catalog", "Product")
     ProductVariant = apps.get_model("catalog", "ProductVariant")
     parked = []
 
-    for variant in ProductVariant.objects.select_related("product").all():
-        product = variant.product
+    # Iterate products, not variants: every variant of a product must be folded into
+    # the same in-memory Product instance, or the "already set" guards in
+    # apply_variant_attributes compare against a stale per-row snapshot and the last
+    # variant wins. Variants are ordered by id so "first variant wins" is deterministic.
+    products = Product.objects.prefetch_related(
+        Prefetch("variants", queryset=ProductVariant.objects.order_by("id"))
+    )
+    for product in products:
         changed = []
-
-        if variant.fabric and product.fabric_id is None:
-            option = resolve_or_park(AttributeOption, "fabric", variant.fabric)
-            if option:
-                product.fabric_id = option.id
-                changed.append("fabric_id")
-                if not option.is_filterable:
-                    parked.append(f"fabric={variant.fabric!r} (product {product.slug})")
-
-        raw_zari = (variant.zari_type or "").strip()
-        if raw_zari:
-            zari_slug, border_slug = ZARI_MAP.get(raw_zari, (None, None))
-            if zari_slug and product.zari_id is None:
-                option = AttributeOption.objects.filter(key="zari", value_slug=zari_slug).first()
-                if option:
-                    product.zari_id = option.id
-                    changed.append("zari_id")
-            if border_slug and product.border_id is None:
-                option = AttributeOption.objects.filter(key="border", value_slug=border_slug).first()
-                if option:
-                    product.border_id = option.id
-                    changed.append("border_id")
-            work_slug = WORK_MAP.get(raw_zari)
-            if work_slug and product.work_id is None:
-                option = AttributeOption.objects.filter(key="work", value_slug=work_slug).first()
-                if option:
-                    product.work_id = option.id
-                    changed.append("work_id")
-            if raw_zari not in ZARI_MAP:
-                option = resolve_or_park(AttributeOption, "zari", raw_zari)
-                if option and product.zari_id is None:
-                    product.zari_id = option.id
-                    changed.append("zari_id")
-                parked.append(f"zari={raw_zari!r} (product {product.slug})")
-
+        for variant in product.variants.all():
+            variant_changed, variant_parked = apply_variant_attributes(
+                AttributeOption, product, variant.fabric, variant.zari_type
+            )
+            changed.extend(variant_changed)
+            parked.extend(variant_parked)
         if changed:
             product.save(update_fields=list(dict.fromkeys(changed)))
 
@@ -55,7 +34,9 @@ def backfill(apps, schema_editor):
     # Banarasi, Patola, Mysore and Tussar sarees. Backfilling it would publish a false
     # provenance claim. A merchandiser sets these in admin.
     if parked:
-        print("\n[backfill] values parked for review:")
+        # Parked options are shopper-safe (label = the raw value) and excluded from
+        # filters by is_filterable=False. This log is the operator's needs-review list.
+        print("\n[backfill] values parked as needs-review (is_filterable=False):")
         for line in parked:
             print(f"  - {line}")
 

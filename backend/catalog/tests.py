@@ -433,16 +433,56 @@ class SareeAttributeBackfillTests(TestCase):
     fabric labels, move a border value out of the zari column, and never silently
     drop an unrecognised string."""
 
-    def test_duplicate_fabric_labels_collapse_to_one_option(self):
-        from catalog.migrations import _attribute_backfill as backfill
+    def _product(self, slug):
+        category, _ = Category.objects.get_or_create(
+            slug="backfill-fixture", defaults={"name": "Backfill Fixture", "gender": "women"}
+        )
+        return Product.objects.create(
+            name=slug, slug=slug, category=category, gender="women", base_price=1, base_mrp=1
+        )
 
-        self.assertEqual(backfill.FABRIC_MAP["Pure Kanjivaram Silk"], "kanjivaram-silk")
-        self.assertEqual(backfill.FABRIC_MAP["Kanjivaram Silk"], "kanjivaram-silk")
+    def _apply(self, product, fabric="", zari=""):
+        """Drive one variant's strings through the backfill exactly as the migration does."""
+        from catalog.migrations._attribute_backfill import apply_variant_attributes
+
+        changed, parked = apply_variant_attributes(AttributeOption, product, fabric, zari)
+        if changed:
+            product.save(update_fields=list(dict.fromkeys(changed)))
+        return changed, parked
+
+    def test_duplicate_fabric_labels_collapse_to_one_option(self):
+        pure = self._product("collapse-pure-kanjivaram")
+        plain = self._product("collapse-kanjivaram")
+
+        self._apply(pure, fabric="Pure Kanjivaram Silk")
+        self._apply(plain, fabric="Kanjivaram Silk")
+
+        pure.refresh_from_db()
+        plain.refresh_from_db()
+        self.assertEqual(pure.fabric.value_slug, "kanjivaram-silk")
+        # Two labels, one row: this is the fragmentation the feature exists to end.
+        self.assertEqual(pure.fabric_id, plain.fabric_id)
+        self.assertEqual(AttributeOption.objects.filter(key="fabric", label__icontains="Kanjivaram").count(), 1)
 
     def test_fine_zari_border_splits_into_zari_and_border(self):
-        from catalog.migrations import _attribute_backfill as backfill
+        product = self._product("split-fine-zari-border")
 
-        self.assertEqual(backfill.ZARI_MAP["Fine Zari Border"], ("gold-zari", "zari-border"))
+        self._apply(product, zari="Fine Zari Border")
+
+        product.refresh_from_db()
+        self.assertEqual(product.zari.value_slug, "gold-zari")
+        self.assertEqual(product.border.value_slug, "zari-border")
+        self.assertIsNone(product.work_id)
+
+    def test_work_only_value_sets_work_and_leaves_zari_null(self):
+        product = self._product("split-self-weave")
+
+        self._apply(product, zari="Self Weave")
+
+        product.refresh_from_db()
+        self.assertEqual(product.work.value_slug, "woven")
+        self.assertIsNone(product.zari_id)
+        self.assertIsNone(product.border_id)
 
     def test_every_known_zari_string_is_mapped(self):
         from catalog.migrations import _attribute_backfill as backfill
@@ -456,15 +496,33 @@ class SareeAttributeBackfillTests(TestCase):
         self.assertEqual(known - set(backfill.ZARI_MAP), set())
 
     def test_unmapped_value_is_preserved_as_non_filterable(self):
-        from catalog.models import AttributeOption
-        from catalog.migrations import _attribute_backfill as backfill
+        product = self._product("parked-fabric")
 
-        option = backfill.resolve_or_park(AttributeOption, "fabric", "Moonlight Tissue Silk")
-        self.assertFalse(option.is_filterable)
-        self.assertIn("needs-review", option.label)
+        _changed, parked = self._apply(product, fabric="Moonlight Tissue Silk")
+
+        product.refresh_from_db()
+        option = product.fabric
+        self.assertIs(option.is_filterable, False)
+        # The label is shopper-facing, so it round-trips the raw value with no internal
+        # marker; is_filterable is the only review signal. The operator gets this instead:
+        self.assertEqual(option.label, "Moonlight Tissue Silk")
+        self.assertEqual(parked, ["fabric='Moonlight Tissue Silk' (product parked-fabric)"])
+
+    def test_second_variant_does_not_overwrite_the_first_variants_fabric(self):
+        # One Product, two variants — the case the migration's guard exists for. The
+        # mapped value must survive; a later unmapped string must not park over it.
+        product = self._product("two-variant-product")
+
+        self._apply(product, fabric="Kanjivaram Silk")
+        changed, parked = self._apply(product, fabric="Moonlight Tissue Silk")
+
+        product.refresh_from_db()
+        self.assertEqual(product.fabric.value_slug, "kanjivaram-silk")
+        self.assertEqual(changed, [])
+        self.assertEqual(parked, [])
+        self.assertFalse(AttributeOption.objects.filter(value_slug="moonlight-tissue-silk").exists())
 
     def test_variant_serializer_still_exposes_fabric_and_zari_strings(self):
-        from catalog.models import AttributeOption, Category, Product, ProductVariant
         from catalog.serializers import ProductVariantSerializer
 
         category = Category.objects.create(name="Kanjivaram", slug="kanjivaram-x", gender="women")
@@ -480,7 +538,6 @@ class SareeAttributeBackfillTests(TestCase):
         self.assertEqual(data["zari_type"], "Real Gold Zari")
 
     def test_product_with_no_attributes_serializes_blank_not_null(self):
-        from catalog.models import Category, Product, ProductVariant
         from catalog.serializers import ProductVariantSerializer
 
         category = Category.objects.create(name="Plain", slug="plain-x", gender="women")

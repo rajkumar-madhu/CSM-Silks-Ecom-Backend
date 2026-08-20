@@ -260,7 +260,11 @@ class AdminVariantListCreateView(APIView):
     permission_classes = [IsStaffAdmin]
 
     def get(self, request):
-        variants = ProductVariant.objects.select_related("product").order_by("product__name", "sku")
+        # product__fabric / product__zari feed ProductVariantSerializer's fabric and
+        # zari_type method fields; without them this unpaginated list is 2 queries per variant.
+        variants = ProductVariant.objects.select_related(
+            "product", "product__fabric", "product__zari"
+        ).order_by("product__name", "sku")
         return Response(ProductVariantSerializer(variants, many=True).data)
 
     def post(self, request):
