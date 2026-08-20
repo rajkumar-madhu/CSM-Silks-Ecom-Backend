@@ -1,7 +1,153 @@
+/* ============================================================
+   PLP filter sidebar + active-filter chip row.
+   Shared across every filter group (Category, Price, Colour, Discount,
+   Rating, Availability, and the generic saree attribute groups), so
+   styling these classes once fixes the whole filter rail at the same
+   time. Deliberately scoped to the sidebar/chip surface — the banners,
+   product grid, mobile drawer/sheet and mobile bar live elsewhere and
+   are not touched here.
+   ============================================================ */
+
+.plp-aside {
+  width: 280px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 860px) {
+  /* The mobile filter entry point is the "Filter" button in
+     plp-mobile-bar, which opens the same FilterSidebar inside
+     plp-drawer-body — the desktop rail would otherwise duplicate it. */
+  .plp-aside {
+    display: none;
+  }
+}
+
+.plp-filters {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.plp-filters-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.plp-filters-head strong {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.plp-clear-all {
+  background: none;
+  border: 0;
+  color: var(--gold);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+.plp-clear-all:hover {
+  text-decoration: underline;
+}
+
+.plp-filter-group {
+  border-bottom: 1px solid var(--line);
+}
+.plp-filter-group:last-child {
+  border-bottom: 0;
+}
+
+.plp-filter-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 14px 18px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--ink);
+  transition: color var(--transition-fast);
+}
+.plp-filter-group-head:hover {
+  color: var(--gold);
+}
+.plp-filter-group-head svg {
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: transform var(--transition-fast);
+}
+.plp-filter-group.open .plp-filter-group-head svg {
+  transform: rotate(180deg);
+}
+
+.plp-filter-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 18px 14px;
+}
+
+.plp-check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  cursor: pointer;
+  font-size: 13.5px;
+  line-height: 1.3;
+  color: var(--ink-2);
+}
+
+.plp-check-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
+.plp-check-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.plp-check-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plp-check-count {
+  color: var(--muted);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
 .plp-filter-more {
   background: none;
   border: 0;
-  color: var(--gold, #c4923a);
+  color: var(--gold);
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
@@ -9,4 +155,42 @@
   padding: 6px 0 0;
   text-align: left;
 }
-.plp-filter-more:hover { text-decoration: underline; }
+.plp-filter-more:hover {
+  text-decoration: underline;
+}
+
+.plp-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.plp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+.plp-chip:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.plp-chip--clear {
+  border-style: dashed;
+  color: var(--muted);
+}
+.plp-chip--clear:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
