@@ -24,7 +24,11 @@ export function GoogleSignInButton({
 }: GoogleSignInButtonProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(320);
-  const [unavailable, setUnavailable] = useState(false);
+  // Keyed on the clientId it was detected for, so switching clientId clears the flag
+  // during render instead of needing a synchronous setState inside the effect below
+  // (which triggers a cascading re-render — react-hooks/set-state-in-effect).
+  const [unavailableFor, setUnavailableFor] = useState<string | null>(null);
+  const unavailable = Boolean(clientId) && unavailableFor === clientId;
 
   useEffect(() => {
     const node = wrapRef.current;
@@ -37,12 +41,11 @@ export function GoogleSignInButton({
   }, []);
 
   useEffect(() => {
-    setUnavailable(false);
     const timer = window.setTimeout(() => {
       const iframe = wrapRef.current?.querySelector('iframe[src*="accounts.google.com"]');
       const height = iframe?.getBoundingClientRect().height || 0;
       if (!iframe || height < 20) {
-        setUnavailable(true);
+        setUnavailableFor(clientId);
         onUnavailable?.();
       }
     }, 4500);
@@ -84,7 +87,7 @@ export function GoogleSignInButton({
         <GoogleLogin
           onSuccess={onSuccess}
           onError={() => {
-            setUnavailable(true);
+            setUnavailableFor(clientId);
             onError?.();
             onUnavailable?.();
           }}
@@ -94,7 +97,6 @@ export function GoogleSignInButton({
           theme="outline"
           size="large"
           width={String(width)}
-          locale="en"
         />
       </div>
     </div>

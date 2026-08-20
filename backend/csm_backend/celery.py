@@ -31,4 +31,18 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute="*/5"),  # every 5 minutes
         "options": {"expires": 300},  # Task expires after 5 minutes
     },
+    # Customer try-on photos are personal data written by an AllowAny endpoint into
+    # publicly-served media — they must not be retained indefinitely.
+    "purge-expired-tryon-photos": {
+        "task": "ai.purge_expired_tryon_photos",
+        "schedule": crontab(minute=30, hour=3),  # nightly at 03:30
+        "options": {"expires": 3600},
+    },
+    # The stock-alert waitlist promises a WhatsApp/SMS on restock; poll so every route
+    # back into stock (cancel, return, admin adjustment) triggers it.
+    "notify-restocked-watchers": {
+        "task": "catalog.notify_restocked_watchers",
+        "schedule": crontab(minute="*/10"),
+        "options": {"expires": 600},
+    },
 }

@@ -1,3 +1,4 @@
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -6,7 +7,8 @@ from rest_framework.test import APIClient
 
 from inventory.models import StockLedger
 
-from .models import Category, Product, ProductVariant
+from .models import Category, Product, ProductVariant, StockAlert
+from .tasks import notify_restocked_watchers
 
 User = get_user_model()
 
@@ -196,3 +198,187 @@ class AdminCatalogCrudTests(TestCase):
         self.assertEqual(row["name"], "Ivory Silk Kurta Wedding Set")
         self.assertEqual(row["is_active"], True)
         self.assertEqual(row["variant_id"], self.variant.id)
+
+    def test_stock_alert_captures_waitlist_when_sold_out(self):
+        self.variant.stock_qty = 0
+        self.variant.save(update_fields=["stock_qty"])
+        response = APIClient().post(
+            f"/api/products/{self.product.slug}/stock-alert",
+            {"phone": "9876543210", "variant_id": self.variant.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["sku"], self.variant.sku)
+
+
+class StockAlertValidationTests(TestCase):
+    """StockAlertView is AllowAny and took raw request.data, so bad input 500'd."""
+
+    def setUp(self):
+        self.client = APIClient()
+        category = Category.objects.create(name="Silk", slug="silk-alert")
+        self.product = Product.objects.create(name="Alert Saree", slug="alert-saree", category=category, is_active=True)
+        self.variant = ProductVariant.objects.create(
+            product=self.product, sku="ALERT-1", price=Decimal("1000.00"), mrp=Decimal("1200.00"), stock_qty=0
+        )
+
+    def url(self):
+        return f"/api/products/{self.product.slug}/stock-alert"
+
+    def test_non_numeric_variant_id_returns_400(self):
+        resp = self.client.post(self.url(), {"phone": "9876543210", "variant_id": "abc"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_overlong_phone_returns_400(self):
+        # StockAlert.phone is max_length=15; Postgres would raise "value too long".
+        resp = self.client.post(self.url(), {"phone": "9" * 25}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(StockAlert.objects.exists())
+
+    def test_short_phone_still_returns_400(self):
+        resp = self.client.post(self.url(), {"phone": "12345"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_valid_request_creates_alert(self):
+        resp = self.client.post(self.url(), {"phone": "9876543210", "variant_id": self.variant.id}, format="json")
+        self.assertIn(resp.status_code, (200, 201))
+        alert = StockAlert.objects.get()
+        self.assertEqual(alert.phone, "+919876543210")
+        self.assertIsNone(alert.notified_at)
+
+
+class RestockNotificationTests(TestCase):
+    """The waitlist was write-only: nothing read StockAlert and notified_at never got set."""
+
+    def setUp(self):
+        category = Category.objects.create(name="Silk", slug="silk-restock")
+        self.product = Product.objects.create(name="Restock Saree", slug="restock-saree", category=category, is_active=True)
+        self.variant = ProductVariant.objects.create(
+            product=self.product, sku="RESTOCK-1", price=Decimal("1000.00"), mrp=Decimal("1200.00"), stock_qty=0
+        )
+        self.alert = StockAlert.objects.create(variant=self.variant, phone="+919876543210", email="watch@example.com")
+
+    def test_out_of_stock_variant_is_not_notified(self):
+        with patch("catalog.tasks.resend_configured", return_value=True), \
+             patch("catalog.tasks.send_resend_email") as send:
+            result = notify_restocked_watchers()
+        self.assertEqual(result["notified"], 0)
+        send.assert_not_called()
+        self.alert.refresh_from_db()
+        self.assertIsNone(self.alert.notified_at)
+
+    def test_restocked_variant_notifies_and_stamps_once(self):
+        self.variant.stock_qty = 5
+        self.variant.save(update_fields=["stock_qty"])
+
+        with patch("catalog.tasks.resend_configured", return_value=True), \
+             patch("catalog.tasks.gupshup_configured", return_value=False), \
+             patch("catalog.tasks.send_resend_email") as send:
+            result = notify_restocked_watchers()
+        self.assertEqual(result["notified"], 1)
+        self.assertEqual(send.call_count, 1)
+        self.alert.refresh_from_db()
+        self.assertIsNotNone(self.alert.notified_at)
+
+        # A second run must not re-notify.
+        with patch("catalog.tasks.resend_configured", return_value=True), \
+             patch("catalog.tasks.send_resend_email") as send_again:
+            result = notify_restocked_watchers()
+        self.assertEqual(result["notified"], 0)
+        send_again.assert_not_called()
+
+    def test_unconfigured_provider_leaves_alert_pending_for_retry(self):
+        self.variant.stock_qty = 5
+        self.variant.save(update_fields=["stock_qty"])
+
+        with patch("catalog.tasks.resend_configured", return_value=False), \
+             patch("catalog.tasks.gupshup_configured", return_value=False):
+            result = notify_restocked_watchers()
+        self.assertEqual(result["notified"], 0)
+        self.alert.refresh_from_db()
+        self.assertIsNone(self.alert.notified_at)
+
+
+class CatalogFacetCountTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.sarees = Category.objects.create(name="Kanjivaram", slug="kanjivaram", gender="women")
+        self.bridal = Category.objects.create(name="Bridal", slug="bridal", gender="women")
+        self.ruby = Product.objects.create(
+            name="Ruby Bridal Kanjivaram",
+            slug="ruby-bridal-kanjivaram",
+            category=self.bridal,
+            gender="women",
+            occasions=["Wedding", "Festive"],
+            base_price=15990,
+            base_mrp=19990,
+            is_active=True,
+        )
+        ProductVariant.objects.create(
+            product=self.ruby,
+            sku="RUBY-1",
+            price=15990,
+            mrp=19990,
+            stock_qty=5,
+            color_name="Red",
+            color_hex="#a01c1c",
+            fabric="Pure silk",
+        )
+        self.emerald = Product.objects.create(
+            name="Emerald Mysore Silk",
+            slug="emerald-mysore-silk",
+            category=self.sarees,
+            gender="women",
+            occasions=["Festive"],
+            base_price=8990,
+            base_mrp=10990,
+            is_active=True,
+        )
+        ProductVariant.objects.create(
+            product=self.emerald,
+            sku="EMER-1",
+            price=8990,
+            mrp=10990,
+            stock_qty=8,
+            color_name="Green",
+            color_hex="#116644",
+            fabric="Mysore silk",
+        )
+
+    def test_facets_include_counts(self):
+        response = self.client.get("/api/catalog/facets", {"gender": "women"})
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["total"], 2)
+        self.assertEqual(data["category_counts"], {"bridal": 1, "kanjivaram": 1})
+        color_counts = {row["color_name"]: row["count"] for row in data["colors"]}
+        self.assertEqual(color_counts, {"Red": 1, "Green": 1})
+        fabric_counts = {row["name"]: row["count"] for row in data["fabric_counts"]}
+        self.assertEqual(fabric_counts, {"Pure silk": 1, "Mysore silk": 1})
+        occasion_counts = {row["name"]: row["count"] for row in data["occasion_counts"]}
+        self.assertEqual(occasion_counts, {"Wedding": 1, "Festive": 2})
+        # Legacy fields stay intact for older clients.
+        self.assertEqual(sorted(data["fabrics"]), ["Mysore silk", "Pure silk"])
+        self.assertEqual(sorted(data["occasions"]), ["Festive", "Wedding"])
+
+    def test_facets_counts_respect_active_filters(self):
+        response = self.client.get("/api/catalog/facets", {"gender": "women", "color": "Red"})
+
+        data = response.json()
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["category_counts"], {"bridal": 1})
+
+    def test_products_accept_multi_value_facets(self):
+        response = self.client.get("/api/products", {"gender": "women", "color": "Red,Green"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["total"], 2)
+
+        response = self.client.get("/api/products", {"gender": "women", "fabric": "Pure silk,Mysore silk"})
+        self.assertEqual(response.json()["total"], 2)
+
+        response = self.client.get("/api/products", {"gender": "women", "occasion": "Wedding"})
+        self.assertEqual(response.json()["total"], 1)
+
+        response = self.client.get("/api/products", {"gender": "women", "color": "Red"})
+        self.assertEqual(response.json()["total"], 1)

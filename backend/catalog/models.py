@@ -172,3 +172,20 @@ class ProductImage(models.Model):
 
     def __str__(self) -> str:
         return self.alt_text or self.product.name
+
+
+class StockAlert(models.Model):
+    variant = models.ForeignKey(ProductVariant, related_name="stock_alerts", on_delete=models.CASCADE)
+    phone = models.CharField(max_length=15, db_index=True)
+    email = models.EmailField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    notified_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["variant", "phone"], name="uniq_stock_alert_variant_phone"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.phone} → {self.variant.sku}"

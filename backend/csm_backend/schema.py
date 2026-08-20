@@ -1,8 +1,28 @@
 from __future__ import annotations
 
+from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from drf_spectacular.openapi import AutoSchema
 from rest_framework import serializers
 from rest_framework.views import APIView
+
+
+class BlacklistJWTScheme(OpenApiAuthenticationExtension):
+    """Teach drf-spectacular about accounts.auth.BlacklistJWTAuthentication.
+
+    It is the DEFAULT_AUTHENTICATION_CLASS, so without this every one of the ~50
+    protected endpoints emitted a drf_spectacular.W001 warning and was documented
+    as unauthenticated in the published /api/docs schema.
+    """
+
+    target_class = "accounts.auth.BlacklistJWTAuthentication"
+    name = "jwtAuth"
+
+    def get_security_definition(self, auto_schema):
+        return {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+        }
 
 
 class OpenApiFallbackSerializer(serializers.Serializer):

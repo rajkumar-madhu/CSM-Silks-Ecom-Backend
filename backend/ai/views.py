@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
@@ -17,8 +18,11 @@ from catalog.models import Product
 from catalog.selectors import public_products
 from catalog.serializers import ProductListSerializer
 
+from . import services
 from .models import TryOnSession
 from .serializers import TryOnSerializer, VoiceSearchSerializer
+
+logger = logging.getLogger(__name__)
 
 
 def _image_url_to_base64(url: str, timeout: int = 12) -> tuple[str, str] | None:
@@ -65,17 +69,23 @@ def _parse_tryon_json(text: str) -> dict:
     }
 
 
-def anthropic_tryon_result(*, product: Product | None, validated: dict) -> tuple[dict | None, str, int, int]:
+def anthropic_tryon_result(
+    *, product: Product | None, validated: dict, product_image_url: str = ""
+) -> tuple[dict | None, str, int, int]:
     if not settings.ANTHROPIC_API_KEY:
         return None, settings.ANTHROPIC_MODEL, 0, 0
     user_photo = (validated.get("user_photo_base64") or "").strip()
     if not user_photo:
         return None, settings.ANTHROPIC_MODEL, 0, 0
 
-    product_image_url = validated.get("product_image_url") or ""
-    if product and not product_image_url:
-        image = product.images.filter(is_primary=True).first() or product.images.first()
-        product_image_url = image.image_url if image else ""
+    # product_image_url is resolved and absolutised by the caller, which has the request.
+    # urlopen() on a site-relative path raises ValueError, which _image_url_to_base64
+    # swallows — the stylist prompt would silently lose the saree image.
+    if not product_image_url:
+        product_image_url = validated.get("product_image_url") or ""
+        if product and not product_image_url:
+            image = product.images.filter(is_primary=True).first() or product.images.first()
+            product_image_url = image.image_url if image else ""
     product_image = _image_url_to_base64(product_image_url)
 
     try:
@@ -137,56 +147,112 @@ class TryOnView(APIView):
     def post(self, request):
         serializer = TryOnSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+        v = serializer.validated_data
         product = None
-        if serializer.validated_data.get("product_id"):
-            product = get_object_or_404(Product, id=serializer.validated_data["product_id"])
-        skin_tone = serializer.validated_data.get("skin_tone", "medium")
-        body_type = serializer.validated_data.get("body_type", "regular")
-        drape_style = serializer.validated_data.get("drape_style", "traditional")
-        occasion = serializer.validated_data.get("occasion", "")
-        model_used = settings.ANTHROPIC_MODEL
-        tokens_used = 0
-        latency_ms = 0
-        if not settings.ANTHROPIC_API_KEY:
+        if v.get("product_id"):
+            product = get_object_or_404(Product, id=v["product_id"])
+
+        if not v.get("user_photo_base64"):
             return Response(
-                {"detail": "Real AI try-on is not configured. Set ANTHROPIC_API_KEY before enabling this production feature."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-        if not serializer.validated_data.get("user_photo_base64"):
-            return Response(
-                {"detail": "Upload a customer photo to run real Claude Vision try-on."},
+                {"detail": "Upload a customer photo to run AI try-on."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        try:
-            result, model_used, tokens_used, latency_ms = anthropic_tryon_result(product=product, validated=serializer.validated_data)
-        except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
-            logger.error("AI try-on failed: %s", exc)
-            result = None
-            model_used = settings.ANTHROPIC_MODEL
-            latency_ms = 0
-            tokens_used = 0
-            ai_error = str(exc)[:240]
-        else:
-            ai_error = ""
-        if not result:
-            detail = "Real AI try-on failed. Check Anthropic configuration, uploaded image payload, and model access."
-            if ai_error:
-                detail = f"{detail} Provider error: {ai_error}"
-            return Response({"detail": detail}, status=status.HTTP_502_BAD_GATEWAY)
+
+        # 1. Save customer photo to media
+        customer_photo_path = services.save_base64_image(
+            v["user_photo_base64"],
+            v.get("user_photo_media_type", "image/jpeg"),
+            subdir="tryon/customers",
+        )
+        if not customer_photo_path:
+            # save_base64_image returns None for an unsupported media type, an oversized
+            # payload, or any write error. A photo was definitely supplied (checked above),
+            # so fail here rather than letting the fallback below silently pass the saree
+            # itself as the person image into a paid Replicate run.
+            return Response(
+                {"detail": "That photo could not be read. Upload a JPEG, PNG, or WebP under 8 MB."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        customer_photo_url = request.build_absolute_uri(customer_photo_path)
+
+        # 2. Resolve product image URL. ProductImage.image_url may be site-relative
+        # (set_catalog_images writes paths like /images/catalog/x.jpg), and both Replicate
+        # and urlopen need an absolute URL, so absolutise once here.
+        product_image_url = v.get("product_image_url") or ""
+        if product and not product_image_url:
+            image = product.images.filter(is_primary=True).first() or product.images.first()
+            product_image_url = image.image_url if image else ""
+        if product_image_url:
+            product_image_url = request.build_absolute_uri(product_image_url)
+
+        # 3. Run Claude text analysis
+        ai_error = ""
+        result = None
+        model_used = settings.ANTHROPIC_MODEL
+        tokens_used = 0
+        text_latency_ms = 0
+        if settings.ANTHROPIC_API_KEY:
+            try:
+                result, model_used, tokens_used, text_latency_ms = anthropic_tryon_result(
+                    product=product, validated=v, product_image_url=product_image_url
+                )
+            except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
+                logger.error("Claude text analysis failed: %s", exc)
+                ai_error = str(exc)[:240]
+
+        # 4. Run Replicate image generation (non-blocking for UX — failure is acceptable)
+        result_image_url = None
+        vton_error = None
+        vton_latency_ms = 0
+        person_full_url = customer_photo_url
+        garment_url = product_image_url
+        if person_full_url and garment_url:
+            try:
+                result_image_url, vton_error, vton_latency_ms = services.generate_virtual_tryon(
+                    person_image_url=person_full_url,
+                    garment_image_url=garment_url,
+                    category=v.get("vton_category", "dresses"),
+                )
+            except Exception as exc:
+                logger.error("VTON image gen failed: %s", exc)
+                vton_error = str(exc)[:240]
+
+        # 5. Build response
+        response_data: dict = {}
+        if result:
+            response_data.update(result)
+            response_data["ai_verdict"] = response_data.get("ai_verdict") or ""
+
+        if result_image_url:
+            response_data["result_image_url"] = request.build_absolute_uri(result_image_url)
+
         session = TryOnSession.objects.create(
             user=request.user if request.user.is_authenticated else None,
             product=product,
-            skin_tone=skin_tone,
-            body_type=body_type,
-            drape_style=drape_style,
-            occasion=occasion,
-            ai_result=result,
-            confidence_score=result["confidence_score"],
+            skin_tone=v.get("skin_tone", "medium"),
+            body_type=v.get("body_type", "regular"),
+            drape_style=v.get("drape_style", "traditional"),
+            occasion=v.get("occasion", ""),
+            customer_photo=customer_photo_path or "",
+            result_image=result_image_url or "",
+            ai_result=result or {},
+            confidence_score=result.get("confidence_score", 0) if result else 0,
             model_used=model_used,
             tokens_used=tokens_used,
-            latency_ms=latency_ms,
+            latency_ms=text_latency_ms + vton_latency_ms,
         )
-        return Response({"session_id": session.id, **result})
+        response_data["session_id"] = session.id
+
+        if not result and not result_image_url:
+            detail = "AI try-on failed. Check API configuration."
+            if ai_error:
+                detail = f"{detail} Claude error: {ai_error}"
+            if vton_error:
+                detail = f"{detail} VTON error: {vton_error}"
+            return Response({"detail": detail}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response(response_data)
 
 
 class VoiceSearchView(APIView):

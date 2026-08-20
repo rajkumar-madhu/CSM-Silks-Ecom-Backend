@@ -44,10 +44,18 @@ jobs:
       - name: Run Django checks and tests
         env:
           DATABASE_URL: postgresql://csm:csm_secret@localhost:5432/csm_silks_test
+          # DEBUG is unset here, so SECURE_SSL_REDIRECT defaults to `not DEBUG` = True and
+          # 301-redirects every test-client request (~18 tests fail with "301 != 200").
+          SECURE_SSL_REDIRECT: "false"
+        # Run from backend/. From the repo root, stale __pycache__-only app directories
+        # shadow the real apps as namespace packages and the run reports
+        # "Found 0 test(s)" with exit 0 — a false green. They are gitignored so a clean
+        # CI checkout is fine today, but running from backend/ removes the trap entirely.
+        working-directory: backend
         run: |
-          python backend/manage.py check
-          python backend/manage.py migrate --noinput
-          python backend/manage.py test accounts catalog cart orders payments inventory loyalty notifications analytics shipping reviews ai csm_backend
+          python manage.py check
+          python manage.py migrate --noinput
+          python manage.py test accounts catalog cart orders payments inventory loyalty notifications analytics shipping reviews ai csm_backend
 
   frontend:
     name: Frontend Lint & Build

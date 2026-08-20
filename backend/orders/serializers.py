@@ -31,11 +31,20 @@ class CouponSerializer(serializers.ModelSerializer):
         return value.upper().strip()
 
 
+class FinishingChoiceSerializer(serializers.Serializer):
+    cart_item_id = serializers.IntegerField()
+    blouse_stitching = serializers.BooleanField(required=False, default=False)
+    blouse_size = serializers.CharField(required=False, allow_blank=True, max_length=12)
+    fall_pico = serializers.BooleanField(required=False, default=False)
+
+
 class OrderCreateSerializer(serializers.Serializer):
     address_id = serializers.IntegerField()
     coupon_code = serializers.CharField(required=False, allow_blank=True)
     loyalty_points_to_use = serializers.IntegerField(required=False, min_value=0, default=0)
     payment_method = serializers.ChoiceField(choices=Order.PaymentMethod.choices, default=Order.PaymentMethod.COD)
+    occasion_note = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    finishing = FinishingChoiceSerializer(many=True, required=False)
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -56,6 +65,9 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "quantity",
             "subtotal",
             "selected_colour",
+            "blouse_stitching",
+            "blouse_size",
+            "fall_pico",
             "is_reviewed",
         ]
 
@@ -90,6 +102,8 @@ class OrderSerializer(serializers.ModelSerializer):
             "sgst_amount",
             "gst_total",
             "shipping_amount",
+            "finishing_amount",
+            "occasion_note",
             "total_amount",
             "courier_name",
             "tracking_number",

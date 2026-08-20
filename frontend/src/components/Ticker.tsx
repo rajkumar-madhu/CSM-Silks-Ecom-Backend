@@ -1,13 +1,13 @@
 export function Ticker() {
   const items = [
-    'Pure Kanjivaram silk',
-    'Bridal collections',
-    'Handcrafted zari',
-    'Free blouse on sarees',
-    "Men's silk dhotis",
-    'Pan-India shipping',
-    'GST invoice',
-    '15-day returns',
+    'Free shipping above Rs 999',
+    'GI-tagged Kanjivaram silk',
+    'Bridal edits now live',
+    'New festive colors in',
+    "Men's wedding sets",
+    'Secure Razorpay checkout',
+    '15-day easy returns',
+    'WhatsApp styling help',
   ];
   const loop = [...items, ...items];
 

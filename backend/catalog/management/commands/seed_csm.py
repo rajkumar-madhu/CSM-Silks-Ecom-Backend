@@ -10,6 +10,7 @@ from accounts.models import Address
 from catalog.models import Category, Product, ProductImage, ProductVariant
 from inventory.models import StockLedger
 from loyalty.models import LoyaltyReward
+from orders.models import Coupon
 from reviews.models import ProductReview
 
 User = get_user_model()
@@ -455,6 +456,25 @@ class Command(BaseCommand):
         ]
         for name, description, points, reward_type, value in rewards:
             LoyaltyReward.objects.get_or_create(name=name, defaults={"description": description, "points_required": points, "reward_type": reward_type, "reward_value": Decimal(value)})
+
+        # CSM10/COMEBACK10 were previously hardcoded in orders.pricing and granted
+        # unconditionally, so deactivating them was impossible. They are real rows now —
+        # edit or switch them off in admin. Production needs these created there too.
+        coupons = [
+            ("CSM10", "10% off for new customers", Decimal("10.00"), Decimal("0")),
+            ("COMEBACK10", "10% off welcome-back offer", Decimal("10.00"), Decimal("0")),
+        ]
+        for code, description, value, min_order_value in coupons:
+            Coupon.objects.get_or_create(
+                code=code,
+                defaults={
+                    "description": description,
+                    "discount_type": Coupon.DiscountType.PERCENT,
+                    "value": value,
+                    "min_order_value": min_order_value,
+                    "is_active": True,
+                },
+            )
 
         self.stdout.write(self.style.SUCCESS("Seeded CSM Silks Django retailer data."))
         self.stdout.write("Admin: admin@csmsilks.com / admin123")

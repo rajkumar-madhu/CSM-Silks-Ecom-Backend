@@ -1,0 +1,17 @@
+# This build context is rooted at frontend/, so the repo-root .dockerignore does not
+# apply here. Without this file, `COPY . .` in the Dockerfile copies the host's
+# node_modules over the one `npm ci` just installed — the image would then be built
+# against whatever happens to be on the developer's machine, and every rebuild would
+# re-copy hundreds of MB and bust the layer cache.
+node_modules/
+dist/
+.env
+.env.*
+*.log
+.vite/
+coverage/
+playwright-report/
+test-results/
+.playwright-mcp/
+.DS_Store
+Thumbs.db

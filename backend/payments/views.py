@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 
 from django.conf import settings
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
 from accounts.permissions import IsStaffAdmin
@@ -19,7 +21,9 @@ from shipping.services import record_tracking_event
 
 from .models import Payment, RazorpayWebhookEvent
 from .serializers import RazorpayOrderCreateSerializer, RazorpayVerifySerializer, RefundSerializer
-from .services import PaymentGatewayError, PaymentReconciliationError, apply_refund_reconciliation, create_gateway_order, refund_gateway_payment, verify_payment_signature, verify_webhook_signature
+from .services import PaymentGatewayError, PaymentReconciliationError, apply_refund_reconciliation, create_gateway_order, refund_gateway_payment, validate_refund_amount, verify_payment_signature, verify_webhook_signature
+
+logger = logging.getLogger(__name__)
 
 
 class RazorpayOrderView(APIView):
@@ -29,7 +33,14 @@ class RazorpayOrderView(APIView):
     def post(self, request):
         serializer = RazorpayOrderCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        order = Order.objects.select_related("payment").get(id=serializer.validated_data["order_id"], user=request.user)
+        # get_object_or_404, not .get(): an unknown or someone else's order id would otherwise
+        # raise Order.DoesNotExist straight out of the view as a 500 (there is no DRF
+        # EXCEPTION_HANDLER configured). Scoping to request.user keeps it a 404, not a leak.
+        order = get_object_or_404(
+            Order.objects.select_related("payment"),
+            id=serializer.validated_data["order_id"],
+            user=request.user,
+        )
         if order.payment_method != Order.PaymentMethod.RAZORPAY:
             return Response({"detail": "This order does not use Razorpay checkout"}, status=status.HTTP_400_BAD_REQUEST)
         if order.status not in {Order.Status.PAYMENT_PENDING, Order.Status.PENDING}:
@@ -70,7 +81,8 @@ class RazorpayVerifyView(APIView):
         if not verify_payment_signature(data["razorpay_order_id"], data["razorpay_payment_id"], data["razorpay_signature"]):
             return Response({"detail": "Payment signature verification failed"}, status=status.HTTP_400_BAD_REQUEST)
         with transaction.atomic():
-            payment = Payment.objects.select_for_update().select_related("order", "order__user").get(
+            payment = get_object_or_404(
+                Payment.objects.select_for_update().select_related("order", "order__user"),
                 razorpay_order_id=data["razorpay_order_id"],
                 order__user=request.user,
             )
@@ -130,13 +142,24 @@ class RazorpayWebhookView(APIView):
             payment = Payment.objects.filter(razorpay_payment_id=payment_id).select_related("order", "order__user").first()
             if payment:
                 amount = Decimal(str(refund_entity.get("amount", 0))) / Decimal("100")
-                with transaction.atomic():
-                    locked = Payment.objects.select_for_update().select_related("order", "order__user").get(id=payment.id)
-                    apply_refund_reconciliation(
-                        payment=locked,
-                        amount=amount,
-                        refund_id=refund_entity.get("id", ""),
-                        source="razorpay.webhook",
+                try:
+                    with transaction.atomic():
+                        locked = Payment.objects.select_for_update().select_related("order", "order__user").get(id=payment.id)
+                        apply_refund_reconciliation(
+                            payment=locked,
+                            amount=amount,
+                            refund_id=refund_entity.get("id", ""),
+                            source="razorpay.webhook",
+                        )
+                except PaymentReconciliationError:
+                    # Mirrors the payment.captured branch above: a reconciliation refusal is a
+                    # permanent condition for this event, so swallow it and still mark the event
+                    # processed. Letting it escape returned 500 and left processed_at unset, so
+                    # Razorpay retried the same event forever.
+                    logger.exception(
+                        "Refund reconciliation refused for webhook event %s (payment %s)",
+                        event_id,
+                        payment.id,
                     )
 
         event.processed_at = timezone.now()
@@ -150,13 +173,23 @@ class RefundView(APIView):
     def post(self, request):
         serializer = RefundSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        payment = Payment.objects.select_related("order", "order__user").get(order_id=serializer.validated_data["order_id"])
-        amount = serializer.validated_data.get("amount") or (payment.amount - payment.refunded_amount)
+        payment = get_object_or_404(
+            Payment.objects.select_related("order", "order__user"),
+            order_id=serializer.validated_data["order_id"],
+        )
+        requested_amount = serializer.validated_data.get("amount")
+        # `or` would treat an explicit 0 as "not supplied" and silently refund the whole
+        # remaining balance, so test for None instead.
+        amount = requested_amount if requested_amount is not None else (payment.amount - payment.refunded_amount)
         try:
             with transaction.atomic():
                 payment = Payment.objects.select_for_update().select_related("order", "order__user").get(id=payment.id)
                 if payment.status not in {Payment.Status.CAPTURED, Payment.Status.PARTIALLY_REFUNDED, Payment.Status.REFUNDED}:
                     raise PaymentReconciliationError("Only captured payments can be refunded.")
+                # Validate the amount BEFORE calling the gateway. refund_gateway_payment moves real
+                # money and cannot be rolled back, so letting apply_refund_reconciliation reject it
+                # afterwards would leave money out the door with no local record.
+                validate_refund_amount(payment=payment, amount=amount)
                 refund_id = ""
                 provider_status = "manual"
                 if payment.order.payment_method == Order.PaymentMethod.RAZORPAY:

@@ -6,6 +6,7 @@ import {
   Heart,
   Loader2,
   MapPin,
+  MessageCircle,
   Minus,
   Plus,
   Share2,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import { ProductStickyBar } from '@/components/ProductStickyBar';
 import { api, isImageAssetUrl } from '@/lib/api';
+import { productWhatsAppUrl } from '@/lib/storeContact';
 import { buildVariantImageMap, getProductImageList } from '@/lib/productImages';
 import { useCatalogLiveRefresh } from '@/lib/useCatalogLiveRefresh';
 import { liveStatusLabel } from '@/lib/liveStatus';
@@ -27,7 +29,7 @@ import {
   resolveVariantId,
 } from '@/lib/variants';
 import { useApp } from '@/store/AppContext';
-import { ProductVisual } from '@/ui/components';
+import { SpinViewer } from '@/ui/components';
 import type { Product, ProductReview } from '@/types';
 
 export function ProductDetail() {
@@ -41,6 +43,10 @@ export function ProductDetail() {
   const [product, setProduct] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notifyPhone, setNotifyPhone] = useState('');
+  const [notifyEmail, setNotifyEmail] = useState('');
+  const [notifyBusy, setNotifyBusy] = useState(false);
+  const [notifyMsg, setNotifyMsg] = useState('');
   const {
     pinCode,
     setPinCode,
@@ -140,14 +146,23 @@ export function ProductDetail() {
   const activeMrp = Number(activeVariant?.mrp || p.mrp || activePrice);
   const activeStock = Number(activeVariant?.available_qty ?? p.available_qty ?? 0);
   const disc = activeMrp ? Math.max(0, Math.round((1 - activePrice / activeMrp) * 100)) : 0;
-  const selectedImage = imageList[Math.min(selectedThumb, Math.max(imageList.length - 1, 0))];
   const inWish = isInWishlist(p.id);
   const canPurchase = activeStock > 0;
   const maxQty = Math.max(1, Math.min(activeStock || 1, 10));
 
-  const attrs = p.gender === 'men'
-    ? [['Material', activeVariant?.fabric || 'Pure Silk'], ['Zari', activeVariant?.zari_type || 'Gold Zari'], ['Size', activeVariant?.size || selectedSize || 'S to 5XL'], ['Care', activeVariant?.care_instructions || 'Dry Clean Only']]
-    : [['Fabric', activeVariant?.fabric || 'Pure Silk'], ['Zari', activeVariant?.zari_type || 'Gold Zari'], ['Occasion', (p.occasions || []).join(' / ') || 'Bridal / Festive'], ['Blouse Piece', activeVariant?.blouse_included ? 'Included' : 'Not included']];
+  const attrs = (() => {
+    const length = activeVariant?.length_meters || p.length_meters;
+    const spec = p.specifications || {};
+    const rows: Array<[string, string]> = p.gender === 'men'
+      ? [['Material', activeVariant?.fabric || 'Pure Silk'], ['Zari', activeVariant?.zari_type || 'Gold Zari'], ['Size', activeVariant?.size || selectedSize || 'S to 5XL'], ['Care', activeVariant?.care_instructions || 'Dry Clean Only']]
+      : [['Fabric', activeVariant?.fabric || 'Pure Silk'], ['Zari', activeVariant?.zari_type || 'Gold Zari'], ['Occasion', (p.occasions || []).join(' / ') || 'Bridal / Festive'], ['Blouse Piece', activeVariant?.blouse_included ? 'Included' : 'Not included']];
+    if (length) rows.push(['Length', `${length} m`]);
+    for (const key of ['Weight', 'Border', 'Pallu'] as const) {
+      if (spec[key]) rows.push([key, spec[key]]);
+    }
+    if (p.gender === 'women') rows.push(['House finishing', 'Blouse stitching + fall/pico at checkout']);
+    return rows;
+  })();
 
   const buildCartProduct = () => ({
     ...p,
@@ -165,6 +180,25 @@ export function ProductDetail() {
     if (!canPurchase) return;
     const added = await addToCart(buildCartProduct(), quantity);
     if (added) navigate('/cart');
+  };
+
+  const handleStockAlert = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!p.slug) return;
+    setNotifyBusy(true);
+    setNotifyMsg('');
+    try {
+      const result = await api.products.stockAlert(p.slug, {
+        phone: notifyPhone.trim(),
+        email: notifyEmail.trim() || undefined,
+        variant_id: activeVariant?.id,
+      });
+      setNotifyMsg(result.message || 'We will message you when this weave is back.');
+    } catch (err) {
+      setNotifyMsg(err instanceof Error ? err.message : 'Could not save your alert.');
+    } finally {
+      setNotifyBusy(false);
+    }
   };
 
   const submitDeliveryCheck = (event?: FormEvent) => {
@@ -197,7 +231,12 @@ export function ProductDetail() {
       <div className="pd-grid">
         <div className="pd-gallery">
           <div className="pd-main-img">
-            <ProductVisual product={p} className="detail-visual" imageUrl={selectedImage} />
+            <SpinViewer
+              product={p}
+              images={imageList}
+              index={Math.min(selectedThumb, Math.max(imageList.length - 1, 0))}
+              onIndexChange={setSelectedThumb}
+            />
             {disc > 0 && <span className="pd-gallery-off">{disc}% OFF</span>}
           </div>
           <div className="pd-thumbs">
@@ -363,6 +402,40 @@ export function ProductDetail() {
               {canPurchase ? 'Buy now' : 'Unavailable'}
             </button>
           </div>
+          <a
+            className="pd-wa-link"
+            href={productWhatsAppUrl({ name: p.name, sku: activeVariant?.sku, price: activePrice })}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            <MessageCircle size={16} /> Ask about this weave on WhatsApp
+          </a>
+          {!canPurchase && (
+            <form className="pd-notify" onSubmit={(event) => void handleStockAlert(event)}>
+              <p>This weave is spoken for. Leave your WhatsApp — we will ping you when it returns to the loom.</p>
+              <div className="pd-notify-row">
+                <input
+                  value={notifyPhone}
+                  onChange={(event) => setNotifyPhone(event.target.value)}
+                  placeholder="WhatsApp number"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  required
+                  aria-label="WhatsApp number for stock alert"
+                />
+                <input
+                  value={notifyEmail}
+                  onChange={(event) => setNotifyEmail(event.target.value)}
+                  placeholder="Email (optional)"
+                  type="email"
+                  autoComplete="email"
+                  aria-label="Email for stock alert"
+                />
+                <button type="submit" disabled={notifyBusy}>{notifyBusy ? 'Saving...' : 'Notify me'}</button>
+              </div>
+              {notifyMsg && <small>{notifyMsg}</small>}
+            </form>
+          )}
 
           <div className="pd-section-lbl">Product details</div>
           <div className="pd-attrs">

@@ -11,6 +11,11 @@ class TryOnSession(models.Model):
     body_type = models.CharField(max_length=20)
     drape_style = models.CharField(max_length=50)
     occasion = models.CharField(max_length=80, blank=True)
+    # CharField, not URLField: these hold site-relative media paths (/media/tryon/...).
+    # URLField's validator rejects those on any full_clean() path — Django admin, ModelForms —
+    # even though Model.objects.create() persists them without complaint.
+    customer_photo = models.CharField(blank=True, max_length=500)
+    result_image = models.CharField(blank=True, max_length=500)
     ai_result = models.JSONField(default=dict, blank=True)
     confidence_score = models.PositiveSmallIntegerField(default=0)
     added_to_cart = models.BooleanField(default=False)

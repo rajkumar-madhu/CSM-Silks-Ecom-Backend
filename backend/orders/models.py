@@ -73,6 +73,8 @@ class Order(models.Model):
     shipping_address_snapshot = models.JSONField(default=dict, blank=True)
     loyalty_points_earned = models.PositiveIntegerField(default=0)
     loyalty_points_used = models.PositiveIntegerField(default=0)
+    finishing_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    occasion_note = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
@@ -101,6 +103,9 @@ class OrderItem(models.Model):
     quantity = models.PositiveIntegerField(default=1)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2)
     selected_colour = models.CharField(max_length=60, blank=True)
+    blouse_stitching = models.BooleanField(default=False)
+    blouse_size = models.CharField(max_length=12, blank=True)
+    fall_pico = models.BooleanField(default=False)
     is_reviewed = models.BooleanField(default=False)
 
 

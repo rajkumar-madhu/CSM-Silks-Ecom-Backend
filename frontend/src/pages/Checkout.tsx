@@ -5,9 +5,20 @@ import { getDeliveryPin } from '@/lib/deliveryPin';
 import { useCatalogLiveRefresh } from '@/lib/useCatalogLiveRefresh';
 import { useApp } from '@/store/AppContext';
 import { ProductVisual } from '@/ui/components';
-import type { Address } from '@/types';
+import type { Address, CartQuote, CartQuoteFinishing } from '@/types';
 
 type CheckoutPaymentMethod = 'razorpay' | 'cod';
+
+type LineFinishing = {
+  blouse_stitching: boolean;
+  blouse_size: string;
+  fall_pico: boolean;
+};
+
+const BLOUSE_SIZES = ['28', '30', '32', '34', '36', '38', '40', '42', '44', '46'];
+const BLOUSE_STITCH_FEE = 350;
+const FALL_PICO_FEE = 150;
+const FINISHING_DEFAULTS: LineFinishing = { blouse_stitching: false, blouse_size: '36', fall_pico: false };
 
 type CheckoutForm = {
   first_name: string;
@@ -143,9 +154,35 @@ export function Checkout() {
   const [loyaltyBalance, setLoyaltyBalance] = useState(0);
   const [useLoyalty, setUseLoyalty] = useState(false);
   const [stockNotice, setStockNotice] = useState('');
+  const [occasionNote, setOccasionNote] = useState('');
+  const [finishing, setFinishing] = useState<Record<number, LineFinishing>>({});
+
+  const [fetchedQuote, setFetchedQuote] = useState<CartQuote | null>(null);
+  // Derived rather than cleared in an effect: a stale quote must not be shown once the
+  // cart empties or the session ends.
+  const quote = isAuthed && cart.length > 0 ? fetchedQuote : null;
 
   const loyaltyToUse = useLoyalty ? Math.min(loyaltyBalance, Math.floor(Math.max(0, t.subtotal - t.discount))) : 0;
-  const estimatedPayable = Math.max(0, t.total - loyaltyToUse);
+  // Memoised: these feed the quote effect's dependency list, and a fresh array every
+  // render would re-fire the request in a loop.
+  const sareeLines = useMemo(
+    () => cart.filter(item => item.gender === 'women' && item.cart_item_id),
+    [cart],
+  );
+  const finishingPayload = useMemo<CartQuoteFinishing[]>(() => sareeLines.map(item => ({
+    cart_item_id: item.cart_item_id!,
+    ...(finishing[item.cart_item_id!] || FINISHING_DEFAULTS),
+  })), [sareeLines, finishing]);
+  const finishingKey = JSON.stringify(finishingPayload);
+
+  // Totals come from the server (/api/cart/quote), which prices house finishing into the
+  // coupon base. Recomputing GST/shipping/coupon here drifted from what checkout charged.
+  // The getCartTotals() values are only a first paint before the quote lands.
+  const finishingFee = quote ? Number(quote.finishing_total) : 0;
+  const estimatedPayable = quote ? Number(quote.total) : Math.max(0, t.total - loyaltyToUse);
+  const finishingGst = quote ? Number(quote.cgst) + Number(quote.sgst) : t.cgst + t.sgst;
+  const finishingShipping = quote ? Number(quote.shipping) : t.shipping;
+  const displayDiscount = quote ? Number(quote.coupon_discount) + Number(quote.loyalty_discount) : t.discount;
   const stockIssues = cart.filter(item => item.stock_status && item.stock_status !== 'ok');
   const hasStockIssues = stockIssues.length > 0;
   const cartVariantIds = useMemo(() => new Set(cart.map(item => item.variant_id).filter(Boolean) as number[]), [cart]);
@@ -226,6 +263,25 @@ export function Checkout() {
       .catch(() => setLoyaltyBalance(0));
   }, [isAuthed]);
 
+  // No seeding effect for `finishing`: every reader already falls back to
+  // FINISHING_DEFAULTS for a missing line, so pre-populating defaults was redundant.
+  // It also only ever added keys, leaving entries behind for removed cart items.
+
+  useEffect(() => {
+    if (!isAuthed || cart.length === 0) return undefined;
+    let cancelled = false;
+    api.cart.quote({
+      finishing: finishingPayload,
+      coupon_code: couponCode || '',
+      loyalty_points_to_use: loyaltyToUse,
+    })
+      .then(next => { if (!cancelled) setFetchedQuote(next); })
+      .catch(() => { if (!cancelled) setFetchedQuote(null); });
+    return () => { cancelled = true; };
+    // finishingKey is the stable serialisation of finishingPayload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthed, cart.length, finishingKey, couponCode, loyaltyToUse]);
+
   const selectedAddress = useMemo(() => {
     return typeof selectedAddressId === 'number' ? addresses.find(address => address.id === selectedAddressId) : null;
   }, [addresses, selectedAddressId]);
@@ -273,6 +329,11 @@ export function Checkout() {
       showToast('!', 'Missing Details', 'Please fix the highlighted delivery fields');
       return;
     }
+    const missingSize = sareeLines.find((item) => finishing[item.cart_item_id!]?.blouse_stitching && !finishing[item.cart_item_id!]?.blouse_size);
+    if (missingSize) {
+      showToast('!', 'Blouse size needed', `Choose a blouse size for ${missingSize.name}`);
+      return;
+    }
     setPlacing(true);
     let createdOrder: Awaited<ReturnType<typeof api.orders.create>> | null = null;
     try {
@@ -294,6 +355,13 @@ export function Checkout() {
         coupon_code: couponCode,
         loyalty_points_to_use: loyaltyToUse,
         payment_method: paymentMethod === 'cod' ? 'cod' : 'razorpay',
+        occasion_note: occasionNote.trim(),
+        finishing: sareeLines.map((item) => ({
+          cart_item_id: item.cart_item_id!,
+          blouse_stitching: Boolean(finishing[item.cart_item_id!]?.blouse_stitching),
+          blouse_size: finishing[item.cart_item_id!]?.blouse_size || '',
+          fall_pico: Boolean(finishing[item.cart_item_id!]?.fall_pico),
+        })),
       });
       createdOrder = order;
       if (paymentMethod !== 'cod') {
@@ -438,7 +506,62 @@ export function Checkout() {
           </div>
 
           <div className="checkout-card">
-            <div className="checkout-card-title"><div className="cct-step">2</div>Payment Method</div>
+              <div className="checkout-card-title"><div className="cct-step">2</div>House finishing &amp; occasion</div>
+              <p className="checkout-finishing-lede">Stitching and fall/pico are done in-house in Kanchipuram. Size is required only if you add blouse stitching.</p>
+              {sareeLines.map((item) => {
+                const row = finishing[item.cart_item_id!] || FINISHING_DEFAULTS;
+                const update = (patch: Partial<LineFinishing>) => {
+                  setFinishing((prev) => ({
+                    ...prev,
+                    [item.cart_item_id!]: { ...row, ...patch },
+                  }));
+                };
+                return (
+                  <div key={item.cart_item_id} className="checkout-finish-line">
+                    <strong>{item.name}</strong>
+                    <span>Qty {item.qty}</span>
+                    <label className="catalog-check">
+                      <input
+                        type="checkbox"
+                        checked={row.blouse_stitching}
+                        onChange={(event) => update({ blouse_stitching: event.target.checked })}
+                      />
+                      Blouse stitching · Rs {BLOUSE_STITCH_FEE}
+                    </label>
+                    {row.blouse_stitching && (
+                      <label className="catalog-control">
+                        <span>Blouse size</span>
+                        <select value={row.blouse_size} onChange={(event) => update({ blouse_size: event.target.value })}>
+                          {BLOUSE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+                        </select>
+                      </label>
+                    )}
+                    <label className="catalog-check">
+                      <input
+                        type="checkbox"
+                        checked={row.fall_pico}
+                        onChange={(event) => update({ fall_pico: event.target.checked })}
+                      />
+                      Fall &amp; pico · Rs {FALL_PICO_FEE}
+                    </label>
+                  </div>
+                );
+              })}
+              <div className="form-field">
+                <label>Occasion / gift note</label>
+                <textarea
+                  value={occasionNote}
+                  onChange={(event) => setOccasionNote(event.target.value.slice(0, 200))}
+                  placeholder="Daughter's wedding, pack as bridal gift…"
+                  rows={3}
+                  maxLength={200}
+                />
+                <small>{occasionNote.length}/200</small>
+              </div>
+            </div>
+
+          <div className="checkout-card">
+            <div className="checkout-card-title"><div className="cct-step">3</div>Payment Method</div>
             {loyaltyBalance > 0 && (
               <label className={`loyalty-toggle ${useLoyalty ? 'on' : ''}`}>
                 <input type="checkbox" checked={useLoyalty} onChange={event => setUseLoyalty(event.target.checked)} />
@@ -495,10 +618,10 @@ export function Checkout() {
             ))}
             <div className="summary-divider" />
             <div className="os-row"><span>Subtotal</span><span className="os-val">{fmt(t.subtotal)}</span></div>
-            {t.discount > 0 && <div className="os-row"><span>Discount {couponCode ? `(${couponCode})` : ''}</span><span className="os-val free">- {fmt(t.discount)}</span></div>}
-            {loyaltyToUse > 0 && <div className="os-row"><span>Loyalty points</span><span className="os-val free">- {fmt(loyaltyToUse)}</span></div>}
-            <div className="os-row"><span>Shipping</span><span className="os-val" style={{ color: t.shipping === 0 ? 'var(--grn)' : 'inherit' }}>{t.shipping === 0 ? 'Free' : fmt(t.shipping)}</span></div>
-            <div className="os-row"><span>GST (5%)</span><span className="os-val">{fmt(t.cgst + t.sgst)}</span></div>
+            {finishingFee > 0 && <div className="os-row"><span>House finishing</span><span className="os-val">{fmt(finishingFee)}</span></div>}
+            {displayDiscount > 0 && <div className="os-row"><span>Discount {couponCode ? `(${couponCode})` : ''}</span><span className="os-val free">- {fmt(displayDiscount)}</span></div>}
+            <div className="os-row"><span>Shipping</span><span className="os-val" style={{ color: finishingShipping === 0 ? 'var(--grn)' : 'inherit' }}>{finishingShipping === 0 ? 'Free' : fmt(finishingShipping)}</span></div>
+            <div className="os-row"><span>GST (5%)</span><span className="os-val">{fmt(finishingGst)}</span></div>
             <div className="os-row total"><span>Total</span><span className="os-val">{fmt(estimatedPayable)}</span></div>
           </div>
         </div>

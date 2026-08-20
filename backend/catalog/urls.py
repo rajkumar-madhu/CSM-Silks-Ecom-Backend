@@ -15,6 +15,7 @@ from .views import (
     ProductDeliveryCheckView,
     ProductDetailView,
     ProductListView,
+    StockAlertView,
 )
 
 urlpatterns = [
@@ -25,6 +26,7 @@ urlpatterns = [
     path("search", ProductListView.as_view()),
     path("products/<slug:slug>", ProductDetailView.as_view()),
     path("products/<slug:slug>/delivery", ProductDeliveryCheckView.as_view()),
+    path("products/<slug:slug>/stock-alert", StockAlertView.as_view()),
     path("admin/products", AdminProductListCreateView.as_view()),
     path("admin/products/quick-create", AdminProductQuickCreateView.as_view()),
     path("admin/products/<int:product_id>", AdminProductDetailView.as_view()),

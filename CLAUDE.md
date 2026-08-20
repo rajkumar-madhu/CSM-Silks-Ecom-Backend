@@ -14,14 +14,23 @@ CSM Silks E-Commerce is a full-stack platform for a textile retailer built with 
 # Run Django dev server (port 8000)
 python backend/manage.py runserver 0.0.0.0:8000
 
+# Tests MUST be run from backend/. Invoked from the repo root, stale __pycache__-only
+# directories (accounts/, catalog/, ...) left by earlier runs become namespace packages
+# that shadow the real apps: the run reports "Found 0 test(s)" and exits 0, which looks
+# like a pass. They are gitignored, so CI (a clean checkout) is unaffected.
+# SECURE_SSL_REDIRECT defaults on whenever DEBUG=False and 301-redirects every test client
+# request; without the override ~18 unrelated tests fail with "301 != 200".
+cd backend
+
 # Run all tests
-python backend/manage.py test accounts catalog cart orders payments inventory loyalty notifications analytics shipping reviews ai
+SECURE_SSL_REDIRECT=false python manage.py test accounts catalog cart orders payments \
+    inventory loyalty notifications analytics shipping reviews ai csm_backend
 
 # Run single app tests
-python backend/manage.py test accounts
+SECURE_SSL_REDIRECT=false python manage.py test accounts
 
 # Run specific test class
-python backend/manage.py test accounts.tests.AccountsTest
+SECURE_SSL_REDIRECT=false python manage.py test accounts.tests.OTPApiTests
 
 # Migrations
 python backend/manage.py makemigrations

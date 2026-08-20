@@ -1,13 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
 import {
   AlertTriangle,
+  ArrowUpRight,
   BarChart3,
   BadgePercent,
   Boxes,
   Clock3,
+  Eye,
+  EyeOff,
   FileText,
+  IndianRupee,
+  Loader2,
+  LockKeyhole,
   LogOut,
+  Mail,
   MapPin,
   PackageCheck,
   RefreshCw,
@@ -16,11 +23,14 @@ import {
   Send,
   ShieldCheck,
   ShoppingBag,
+  Sparkles,
   Star,
+  TrendingUp,
   Truck,
   Users,
 } from 'lucide-react';
 import { AdminCatalogManager } from '@/features/admin/components/AdminCatalogManager';
+import { AdminChoice } from '@/features/admin/components/AdminChoice';
 import { ADMIN_STATUS_CLASS, ORDER_STATUS_LABEL, formatDateTime, latestTrackingEvent, lifecycleProgress, sortTrackingEvents } from '@/lib/orderLifecycle';
 import { useCatalogLiveRefresh } from '@/lib/useCatalogLiveRefresh';
 import { connectOrderRealtime, type RealtimeStatus } from '@/lib/realtime';
@@ -169,6 +179,12 @@ function formatAdminNumber(value: number | string | undefined) {
   return Number(value || 0).toLocaleString('en-IN');
 }
 
+type AdminNavItem = {
+  key: AdminPage;
+  label: string;
+  icon: typeof BarChart3;
+};
+
 export function Admin() {
   const { refreshSession } = useApp();
   const [page, setPage] = useState<AdminPage>(() => pageFromHash());
@@ -178,6 +194,8 @@ export function Admin() {
   const [adminUser, setAdminUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(Boolean(api.tokens.getAccessToken()));
   const [loginError, setLoginError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const navigatePage = (next: AdminPage) => {
     setPage(next);
@@ -240,6 +258,7 @@ export function Admin() {
       setLoginError('Enter admin email/username and password.');
       return;
     }
+    setSubmitting(true);
     try {
       const session = await api.auth.adminLogin(nextEmail, nextPassword);
       if (!isAdminUser(session.user)) throw new Error('This account does not have admin access.');
@@ -251,6 +270,8 @@ export function Admin() {
       api.tokens.clearTokens();
       setAuthed(false);
       setLoginError(err instanceof Error ? err.message : 'Unable to sign in');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -265,69 +286,127 @@ export function Admin() {
 
   if (checking) {
     return (
-      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg)', color: 'var(--text)' }}>
-        <div className="chart-card admin-login-card">
-          <div className="chart-title">Checking admin session...</div>
+      <AdminGate>
+        <div className="admin-gate-card admin-gate-loading" role="status">
+          <span className="admin-gate-seal">CSM</span>
+          <p>Opening the house desk…</p>
         </div>
-      </div>
+      </AdminGate>
     );
   }
 
   if (!authed) {
     return (
-      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg)', color: 'var(--text)' }}>
-        <div className="chart-card admin-login-card">
-          <form
-            className="admin-login-form"
-            onSubmit={event => {
-              event.preventDefault();
-              void login();
-            }}
-          >
-            <div className="chart-title" style={{ marginBottom: 18, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <ShieldCheck size={22} aria-hidden="true" />
-              CSM Admin Login
+      <AdminGate>
+        <form
+          className="admin-gate-card"
+          onSubmit={event => {
+            event.preventDefault();
+            void login();
+          }}
+        >
+          <div className="admin-gate-kicker">
+            <ShieldCheck size={16} aria-hidden="true" />
+            Staff access
+          </div>
+          <h1>Sign in to the atelier desk</h1>
+          <p className="admin-gate-lead">Operations email and password. Catalog, floor stock, and order lifecycle live here.</p>
+          {loginError && <div className="admin-gate-error" role="alert">{loginError}</div>}
+          <label className="admin-gate-field">
+            <span>Email or username</span>
+            <div>
+              <Mail size={18} aria-hidden="true" />
+              <input
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="admin@csmsilks.com"
+                autoComplete="username"
+                autoFocus
+              />
             </div>
-            {loginError && <div style={{ color: 'var(--red)', fontSize: 12, marginBottom: 12 }} role="alert">{loginError}</div>}
-            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Email or username" autoComplete="username" aria-label="Admin email or username" style={adminInput} />
-            <input value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" type="password" autoComplete="current-password" aria-label="Admin password" style={adminInput} />
-            <button className="btn btn-gold" type="submit">Login</button>
-          </form>
-        </div>
-      </div>
+          </label>
+          <label className="admin-gate-field">
+            <span>Password</span>
+            <div>
+              <LockKeyhole size={18} aria-hidden="true" />
+              <input
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                className="admin-gate-eye"
+                onClick={() => setShowPassword(open => !open)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </label>
+          <button className="admin-gate-submit" type="submit" disabled={submitting}>
+            {submitting ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
+            {submitting ? 'Signing in…' : 'Enter console'}
+          </button>
+          <a className="admin-gate-storefront" href="/">Back to the storefront</a>
+        </form>
+      </AdminGate>
     );
   }
 
-  const nav = [
-    { key: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { key: 'orders', label: 'Orders', icon: ShoppingBag },
-    { key: 'products', label: 'Catalog', icon: Boxes },
-    { key: 'inventory', label: 'Inventory', icon: PackageCheck },
-    { key: 'shipments', label: 'Shipments', icon: Truck },
-    { key: 'coupons', label: 'Coupons', icon: BadgePercent },
-    { key: 'returns', label: 'Returns', icon: RotateCcw },
-    { key: 'customers', label: 'Customers', icon: Users },
-    { key: 'reviews', label: 'Reviews', icon: Star },
-    { key: 'reports', label: 'Reports', icon: FileText },
-    { key: 'audit', label: 'Audit Logs', icon: ShieldCheck },
-    { key: 'unsold', label: 'Stock Alerts', icon: AlertTriangle },
-  ] as const;
+  const navGroups: Array<{ label: string; items: AdminNavItem[] }> = [
+    {
+      label: 'Floor',
+      items: [
+        { key: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+        { key: 'orders', label: 'Orders', icon: ShoppingBag },
+        { key: 'shipments', label: 'Shipments', icon: Truck },
+        { key: 'returns', label: 'Returns', icon: RotateCcw },
+      ],
+    },
+    {
+      label: 'Catalog',
+      items: [
+        { key: 'products', label: 'Catalog', icon: Boxes },
+        { key: 'inventory', label: 'Inventory', icon: PackageCheck },
+        { key: 'unsold', label: 'Stock alerts', icon: AlertTriangle },
+        { key: 'coupons', label: 'Coupons', icon: BadgePercent },
+      ],
+    },
+    {
+      label: 'House',
+      items: [
+        { key: 'customers', label: 'Customers', icon: Users },
+        { key: 'reviews', label: 'Reviews', icon: Star },
+        { key: 'reports', label: 'Reports', icon: FileText },
+        { key: 'audit', label: 'Audit', icon: ShieldCheck },
+      ],
+    },
+  ];
+  const navItems = navGroups.flatMap((group) => group.items);
 
   return (
     <div className="admin-shell">
       <div className="admin-sidebar">
         <div className="admin-logo">
           <span className="admin-mark">CSM</span>
-          <span className="admin-tag">Retailer Admin</span>
-          <div className="admin-version"><span className="v-dot" /> Production console</div>
+          <span className="admin-tag">Kanchipuram house desk</span>
+          <div className="admin-version"><span className="v-dot" /> Live atelier</div>
         </div>
         <div className="admin-nav">
-          <div className="nav-group">Operations</div>
-          {nav.map(({ key, label, icon: Icon }) => (
-            <div key={key} className={`nav-item ${page === key ? 'active' : ''}`} role="presentation">
-              <button type="button" className="nav-item-btn" onClick={() => navigatePage(key)}>
-                <Icon className="nav-icon" size={17} /> <span>{label}</span>
-              </button>
+          {navGroups.map((group) => (
+            <div key={group.label} className="nav-section">
+              <div className="nav-group">{group.label}</div>
+              {group.items.map(({ key, label, icon: Icon }) => (
+                <div key={key} className={`nav-item ${page === key ? 'active' : ''}`} role="presentation">
+                  <button type="button" className="nav-item-btn" onClick={() => navigatePage(key)}>
+                    <span className="nav-icon-wrap" aria-hidden="true"><Icon className="nav-icon" size={16} /></span>
+                    <span>{label}</span>
+                  </button>
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -338,7 +417,7 @@ export function Admin() {
 
       <div className="admin-main">
         <div className="admin-topbar">
-          <div className="admin-topbar-title">{nav.find(item => item.key === page)?.label || 'Dashboard'}</div>
+          <div className="admin-topbar-title">{navItems.find(item => item.key === page)?.label || 'Dashboard'}</div>
           <div className="admin-topbar-actions">
             {adminUser && <span className="admin-user-chip">{adminUser.email || adminUser.full_name || 'Admin'}</span>}
             <div className="live-chip"><span className="live-dot2" /> LIVE API</div>
@@ -346,7 +425,7 @@ export function Admin() {
           </div>
         </div>
         <div className="admin-content">
-          {page === 'dashboard' && <AdminDashboard />}
+          {page === 'dashboard' && <AdminDashboard onOpenPage={navigatePage} />}
           {page === 'orders' && <AdminOrders />}
           {page === 'products' && <AdminCatalogManager />}
           {page === 'inventory' && <AdminInventory />}
@@ -364,12 +443,55 @@ export function Admin() {
   );
 }
 
-function AdminDashboard() {
+function AdminGate({ children }: { children: ReactNode }) {
+  return (
+    <div className="admin-gate">
+      <section className="admin-gate-story" aria-label="CSM Silks operations atelier">
+        <div className="admin-gate-brand">
+          <span>CSM</span>
+          <em>Silks · since 1987</em>
+        </div>
+        <div className="admin-gate-copy">
+          <p className="admin-gate-eyebrow">Operations atelier</p>
+          <h2>Run the house from one silk desk.</h2>
+          <p>Catalog truth, live orders, packing, and returns — the same floor rhythm as Kanchipuram, on a quieter screen.</p>
+        </div>
+        <ul className="admin-gate-points">
+          <li>
+            <ShoppingBag size={18} />
+            <div>
+              <strong>Order lifecycle</strong>
+              <span>Confirm, pack, ship, and recover RTO without leaving the desk.</span>
+            </div>
+          </li>
+          <li>
+            <Boxes size={18} />
+            <div>
+              <strong>Stock as woven</strong>
+              <span>SKU, unsold capital, and live catalog updates in one pulse.</span>
+            </div>
+          </li>
+          <li>
+            <ShieldCheck size={18} />
+            <div>
+              <strong>House audit</strong>
+              <span>Staff actions stay attributed. The floor stays accountable.</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+      <div className="admin-gate-panel">{children}</div>
+    </div>
+  );
+}
+
+function AdminDashboard({ onOpenPage }: { onOpenPage: (page: AdminPage) => void }) {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [notice, setNotice] = useState('');
   const [orderRealtimeStatus, setOrderRealtimeStatus] = useState<RealtimeStatus>('connecting');
   const load = useCallback(() => {
-    return api.admin.dashboard().then(data => setData(data as DashboardData)).catch(() => setData(null));
+    return api.admin.dashboard().then(data => setData(data as DashboardData)).catch(() => setData(null)).finally(() => setLoaded(true));
   }, []);
   useEffect(() => { void Promise.resolve().then(load); }, [load]);
   useEffect(() => connectOrderRealtime('/ws/orders/', {
@@ -388,57 +510,98 @@ function AdminDashboard() {
     },
   });
   const k = data?.kpis || {};
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const todayLabel = new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
   const kpiCards = [
     {
-      label: 'Net Revenue Today',
+      label: 'Net revenue today',
       value: formatAdminMoney((k.net_revenue_today || k.revenue_today) as number | string | undefined),
-      note: `Gross ${formatAdminMoney(k.gross_revenue_today as number | string | undefined)} / refunds ${formatAdminMoney(k.refunds_today as number | string | undefined)}`,
+      note: `Gross ${formatAdminMoney(k.gross_revenue_today as number | string | undefined)} · refunds ${formatAdminMoney(k.refunds_today as number | string | undefined)}`,
+      tone: 'gold' as const,
+      icon: IndianRupee,
     },
     {
-      label: 'Net Revenue Month',
+      label: 'Net revenue month',
       value: formatAdminMoney((k.net_revenue_month || k.revenue_month) as number | string | undefined),
-      note: `Gross ${formatAdminMoney(k.gross_revenue_month as number | string | undefined)} / refunds ${formatAdminMoney(k.refunds_month as number | string | undefined)}`,
+      note: `Gross ${formatAdminMoney(k.gross_revenue_month as number | string | undefined)} · refunds ${formatAdminMoney(k.refunds_month as number | string | undefined)}`,
+      tone: 'ink' as const,
+      icon: TrendingUp,
     },
     {
-      label: 'Orders Today',
+      label: 'Orders today',
       value: formatAdminNumber(k.orders_today as number | string | undefined),
-      note: `${formatAdminNumber(k.paid_orders_today as number | string | undefined)} paid / ${formatAdminNumber(k.refunded_orders_today as number | string | undefined)} refunded`,
+      note: `${formatAdminNumber(k.paid_orders_today as number | string | undefined)} paid · ${formatAdminNumber(k.refunded_orders_today as number | string | undefined)} refunded`,
+      tone: 'ruby' as const,
+      icon: ShoppingBag,
     },
     {
-      label: 'Returns Today',
+      label: 'Returns today',
       value: formatAdminNumber(k.returns_today as number | string | undefined),
-      note: `${formatAdminNumber(k.total_customers as number | string | undefined)} customers in CRM`,
+      note: `${formatAdminNumber(k.total_customers as number | string | undefined)} customers in the house book`,
+      tone: 'green' as const,
+      icon: RotateCcw,
     },
   ];
+  const shortcuts = [
+    { key: 'orders' as AdminPage, label: 'Orders', hint: 'Lifecycle & packing', icon: ShoppingBag },
+    { key: 'products' as AdminPage, label: 'Catalog', hint: 'Sarees, sets, SKUs', icon: Boxes },
+    { key: 'shipments' as AdminPage, label: 'Shipments', hint: 'Labels & AWB', icon: Truck },
+    { key: 'unsold' as AdminPage, label: 'Stock alerts', hint: 'Capital sitting still', icon: AlertTriangle },
+  ];
+  const recent = data?.recent_orders || [];
   return (
-    <>
+    <div className="dash-board">
       {notice && <div className="admin-alert good">{notice}</div>}
-      <div className="admin-panel-head compact">
+      <section className="dash-hero">
         <div>
-          <span className="admin-eyebrow">Realtime overview</span>
-          <h2>Business pulse</h2>
-          <p>Revenue, order count, and recent orders refresh from live order lifecycle events.</p>
+          <span className="admin-eyebrow">{todayLabel}</span>
+          <h2>{greeting}, house desk</h2>
+          <p>Revenue, orders, and stock refresh from the live floor — not a nightly snapshot.</p>
         </div>
         <div className="admin-head-actions">
           <span className={`ws-chip ${orderRealtimeStatus}`}>{orderRealtimeStatus === 'connected' ? 'Live orders' : orderRealtimeStatus}</span>
           <span className={`ws-chip ${catalogRealtimeStatus}`}>{catalogRealtimeStatus === 'connected' ? 'Live catalog' : catalogRealtimeStatus}</span>
           <button className="admin-soft-btn" onClick={() => void load()}><RefreshCw size={14} /> Refresh</button>
         </div>
-      </div>
+      </section>
       <div className="kpi-grid-4">
-        {kpiCards.map(({ label, value, note }) => (
-          <div key={label} className="kpi-card">
-            <div className="kpi-value">{value}</div>
+        {kpiCards.map(({ label, value, note, tone, icon: Icon }) => (
+          <article key={label} className={`kpi-card kpi-${tone} ${!loaded ? 'is-loading' : ''}`}>
+            <div className="kpi-icon" aria-hidden="true"><Icon size={18} /></div>
             <div className="kpi-label">{label}</div>
+            <div className="kpi-value">{loaded ? value : '—'}</div>
             <div className="kpi-note">{note}</div>
-          </div>
+          </article>
         ))}
       </div>
-      <div className="chart-card">
-        <div className="chart-title">Recent Orders</div>
-        <AdminOrderTable orders={data?.recent_orders || []} />
+      <div className="dash-shortcuts">
+        {shortcuts.map(({ key, label, hint, icon: Icon }) => (
+          <button key={key} type="button" className="dash-shortcut" onClick={() => onOpenPage(key)}>
+            <Icon size={18} />
+            <span>
+              <strong>{label}</strong>
+              <em>{hint}</em>
+            </span>
+            <ArrowUpRight size={16} />
+          </button>
+        ))}
       </div>
-    </>
+      <div className="chart-card dash-orders">
+        <div className="chart-title chart-title-between">
+          <span>Recent orders</span>
+          <button type="button" className="admin-soft-btn" onClick={() => onOpenPage('orders')}>Open orders</button>
+        </div>
+        {loaded && recent.length === 0 ? (
+          <div className="dash-empty">
+            <ShoppingBag size={28} />
+            <p>No orders in this pulse yet. New checkouts will appear here live.</p>
+          </div>
+        ) : (
+          <AdminOrderTable orders={recent} />
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -520,20 +683,24 @@ function AdminOrders() {
           <p>Every action below writes a customer-visible tracking event and an admin audit log.</p>
         </div>
         <div className="admin-head-actions">
-          <label className="admin-field audit-filter">Status filter
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-              <option value="">All statuses</option>
-              <option value="pending">Pending</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="packed">Packed</option>
-              <option value="shipped">Shipped</option>
-              <option value="out_for_delivery">Out for delivery</option>
-              <option value="delivered">Delivered</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="return_initiated">Return initiated</option>
-              <option value="refunded">Refunded</option>
-            </select>
-          </label>
+          <AdminChoice
+            label="Status"
+            wrap
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={[
+              { value: '', label: 'All' },
+              { value: 'pending', label: 'Pending' },
+              { value: 'confirmed', label: 'Confirmed' },
+              { value: 'packed', label: 'Packed' },
+              { value: 'shipped', label: 'Shipped' },
+              { value: 'out_for_delivery', label: 'Out for delivery' },
+              { value: 'delivered', label: 'Delivered' },
+              { value: 'cancelled', label: 'Cancelled' },
+              { value: 'return_initiated', label: 'Returns' },
+              { value: 'refunded', label: 'Refunded' },
+            ]}
+          />
           <span className={`ws-chip ${realtimeStatus}`}>{realtimeStatus === 'connected' ? 'Live WebSocket' : realtimeStatus}</span>
           <button className="admin-primary-btn" onClick={load}><RefreshCw size={14} /> Refresh orders</button>
         </div>
@@ -823,16 +990,21 @@ function AdminShipments() {
           <label className="admin-field">AWB / Tracking<input value={form.awb_number} onChange={e => setForm({ ...form, awb_number: e.target.value })} /></label>
           <label className="admin-field wide">Tracking URL<input value={form.tracking_url} onChange={e => setForm({ ...form, tracking_url: e.target.value })} placeholder="https://..." /></label>
           <label className="admin-field">Status
-            <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value as AdminShipment['status'] })}>
-              <option value="created">Created</option>
-              <option value="picked_up">Picked up</option>
-              <option value="in_transit">In transit</option>
-              <option value="out_for_delivery">Out for delivery</option>
-              <option value="delivered">Delivered</option>
-              <option value="failed">Failed</option>
-              <option value="rto_initiated">RTO initiated</option>
-              <option value="rto_delivered">RTO delivered</option>
-            </select>
+            <AdminChoice
+              wrap
+              value={form.status}
+              onChange={(value) => setForm({ ...form, status: value })}
+              options={[
+                { value: 'created', label: 'Created' },
+                { value: 'picked_up', label: 'Picked up' },
+                { value: 'in_transit', label: 'In transit' },
+                { value: 'out_for_delivery', label: 'Out for delivery' },
+                { value: 'delivered', label: 'Delivered' },
+                { value: 'failed', label: 'Failed' },
+                { value: 'rto_initiated', label: 'RTO started' },
+                { value: 'rto_delivered', label: 'RTO in' },
+              ]}
+            />
           </label>
           <label className="admin-field">Current location<input value={form.event_location} onChange={e => setForm({ ...form, event_location: e.target.value })} placeholder="Kanchipuram hub" /></label>
           <label className="admin-field wide">Customer update note<input value={form.event_note} onChange={e => setForm({ ...form, event_note: e.target.value })} placeholder="Package handed to courier / reached Chennai hub" /></label>
@@ -991,10 +1163,14 @@ function AdminCoupons() {
             <input value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} placeholder="LAUNCH20" />
           </label>
           <label className="admin-field">Discount type
-            <select value={form.discount_type} onChange={e => setForm({ ...form, discount_type: e.target.value as AdminCoupon['discount_type'] })}>
-              <option value="percent">Percentage</option>
-              <option value="flat">Flat amount</option>
-            </select>
+            <AdminChoice
+              value={form.discount_type}
+              onChange={(value) => setForm({ ...form, discount_type: value })}
+              options={[
+                { value: 'percent', label: 'Percentage' },
+                { value: 'flat', label: 'Flat amount' },
+              ]}
+            />
           </label>
           <label className="admin-field">Value
             <input type="number" min="0" value={form.value} onChange={e => setForm({ ...form, value: e.target.value })} placeholder="20" />
@@ -1367,13 +1543,16 @@ function AdminReviews() {
         </div>
       </div>
       <div className="admin-table-toolbar">
-        <label className="admin-field audit-filter">Visibility
-          <select value={publishedFilter} onChange={e => setPublishedFilter(e.target.value)}>
-            <option value="">All reviews</option>
-            <option value="true">Published</option>
-            <option value="false">Hidden</option>
-          </select>
-        </label>
+        <AdminChoice
+          label="Visibility"
+          value={publishedFilter}
+          onChange={setPublishedFilter}
+          options={[
+            { value: '', label: 'All' },
+            { value: 'true', label: 'Published' },
+            { value: 'false', label: 'Hidden' },
+          ]}
+        />
         <label className="admin-search">
           <Search size={16} />
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search product or review text" />
@@ -1445,14 +1624,3 @@ function AdminUnsold() {
     </div>
   );
 }
-
-const adminInput: React.CSSProperties = {
-  display: 'block',
-  width: '100%',
-  padding: '10px 12px',
-  marginBottom: 12,
-  background: 'var(--surface)',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
-  color: 'var(--text)',
-};

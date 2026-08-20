@@ -17,6 +17,9 @@ export function Search() {
   const [rating, setRating] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [inStock, setInStock] = useState(true);
+  const [color, setColor] = useState('');
+  const [fabric, setFabric] = useState('');
+  const [occasion, setOccasion] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,6 +34,9 @@ export function Search() {
         sort,
         rating,
         max_price: maxPrice,
+        color: color || undefined,
+        fabric: fabric || undefined,
+        occasion: occasion || undefined,
         availability: inStock ? 'in_stock' : undefined,
         per_page: 48,
       })
@@ -39,7 +45,7 @@ export function Search() {
         .finally(() => setLoading(false));
     }, 180);
     return () => window.clearTimeout(id);
-  }, [query, sort, rating, maxPrice, inStock]);
+  }, [query, sort, rating, maxPrice, inStock, color, fabric, occasion]);
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -97,10 +103,16 @@ export function Search() {
           rating={rating}
           availability={inStock}
           maxPrice={maxPrice}
+          color={color}
+          fabric={fabric}
+          occasion={occasion}
           onSort={setSort}
           onRating={setRating}
           onAvailability={setInStock}
           onMaxPrice={setMaxPrice}
+          onColor={setColor}
+          onFabric={setFabric}
+          onOccasion={setOccasion}
         />
 
         {loading ? (

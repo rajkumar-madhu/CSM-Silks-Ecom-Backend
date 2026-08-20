@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ShoppingCart, Sparkles } from 'lucide-react';
+import { ArrowLeft, Download, ShoppingCart, Sparkles } from 'lucide-react';
 import { api, resolveAssetUrl } from '@/lib/api';
 import { useApp } from '@/store/AppContext';
 import { ProductVisual } from '@/ui/components';
@@ -56,7 +56,7 @@ export function TryOn() {
 
   const handleGenerate = async () => {
     if (!photoBase64) {
-      showToast('!', 'Photo required', 'Upload a customer photo to run real AI vision styling');
+      showToast('!', 'Photo required', 'Upload a customer photo to run AI virtual try-on');
       return;
     }
     setLoading(true);
@@ -73,9 +73,9 @@ export function TryOn() {
       });
       setAiResult(result);
       setGenerated(true);
-      showToast('OK', result.provider === 'anthropic' ? 'AI styling ready' : 'Styling ready', 'Your draping and styling recommendation is ready');
+      showToast('OK', result.result_image_url ? 'Virtual try-on ready' : 'AI styling ready', 'Your virtual try-on image and styling recommendations are ready');
     } catch (err) {
-      showToast('!', 'Try-on failed', err instanceof Error ? err.message : 'Unable to generate styling notes');
+      showToast('!', 'Try-on failed', err instanceof Error ? err.message : 'Unable to generate try-on');
     } finally {
       setLoading(false);
     }
@@ -88,6 +88,15 @@ export function TryOn() {
       return;
     }
     await addToCart(suggestedProduct);
+  };
+
+  const downloadResult = () => {
+    const url = aiResult?.result_image_url as string | undefined;
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'csm-silks-tryon.jpg';
+    a.click();
   };
 
   return (
@@ -144,14 +153,14 @@ export function TryOn() {
               <div className="tryon-panel-title">4. Customer photo</div>
               <label className="tryon-upload">
                 <input type="file" accept="image/*" onChange={event => handlePhotoUpload(event.target.files?.[0])} />
-                {photoPreview ? <img src={photoPreview} alt="Customer try-on preview" /> : <span>Upload photo for Claude Vision styling</span>}
+                {photoPreview ? <img src={photoPreview} alt="Customer try-on preview" /> : <span>Upload your photo for AI virtual try-on</span>}
               </label>
-              <p>Required for real AI styling. The API sends this photo with the selected saree image to Claude Vision.</p>
+              <p>Upload a full-body photo. The AI will overlay the selected saree onto your image.</p>
             </div>
 
             <button className="tryon-generate" onClick={handleGenerate} disabled={loading} type="button">
               <Sparkles size={18} />
-              {loading ? 'Generating styling notes...' : 'Run AI vision recommendation'}
+              {loading ? 'Generating virtual try-on...' : 'Try this saree on me'}
             </button>
           </section>
 
@@ -159,54 +168,94 @@ export function TryOn() {
             {!generated ? (
               <div className="tryon-placeholder">
                 <Sparkles size={54} />
-                <h2>Awaiting configuration</h2>
-                <p>Choose your skin tone, body frame, and draping style to generate a textile styling suggestion.</p>
+                <h2>Virtual try-on</h2>
+                <p>Upload your photo and select a saree to see how it looks on you with AI-powered virtual try-on.</p>
               </div>
             ) : (
               <>
-                <div className="tryon-score">
-                  <span>AI match confidence</span>
-                  <strong>{Number(aiResult?.confidence_score || 0)}%</strong>
-                  <em>{String(aiResult?.provider || 'provider')} result</em>
-                </div>
-                <div className="tryon-copy-card">
-                  <p>
-                    {String(aiResult?.ai_verdict || 'No verdict returned by the AI provider.')}
-                  </p>
-                  <dl>
-                    <div>
-                      <dt>Draping specification</dt>
-                      <dd>{String(aiResult?.draping_tip || 'No draping guidance returned by the AI provider.')}</dd>
+                {aiResult?.result_image_url ? (
+                  <div className="tryon-image-result">
+                    <div className="tryon-compare">
+                      {photoPreview && (
+                        <figure className="tryon-compare-fig">
+                          <figcaption>You</figcaption>
+                          <img src={photoPreview} alt="Your photo" />
+                        </figure>
+                      )}
+                      <figure className="tryon-compare-fig tryon-compare-result">
+                        <figcaption>Try-on result</figcaption>
+                        <img src={String(aiResult.result_image_url)} alt="AI virtual try-on result" />
+                      </figure>
                     </div>
-                    <div>
-                      <dt>Blouse suggestion</dt>
-                      <dd>{String(aiResult?.blouse_suggestion || 'No blouse suggestion returned by the AI provider.')}</dd>
+                    <button className="tryon-download-btn" onClick={downloadResult} type="button">
+                      <Download size={14} />
+                      Download
+                    </button>
+                  </div>
+                ) : (
+                  <div className="tryon-score">
+                    <span>AI match confidence</span>
+                    <strong>{Number(aiResult?.confidence_score || 0)}%</strong>
+                    <em>{String(aiResult?.provider || 'provider')} result</em>
+                  </div>
+                )}
+
+                {(() => {
+                  const verdict = String(aiResult?.ai_verdict || '');
+                  const draping = String(aiResult?.draping_tip || '');
+                  const blouse = String(aiResult?.blouse_suggestion || '');
+                  const jewellery = String(aiResult?.jewellery_pairing || '');
+                  const colour = String(aiResult?.colour_analysis || '');
+                  if (!verdict && !draping && !blouse && !jewellery && !colour) return null;
+                  return (
+                    <div className="tryon-copy-card">
+                      {verdict && <p>{verdict}</p>}
+                      <dl>
+                        {draping && (
+                          <div>
+                            <dt>Draping specification</dt>
+                            <dd>{draping}</dd>
+                          </div>
+                        )}
+                        {blouse && (
+                          <div>
+                            <dt>Blouse suggestion</dt>
+                            <dd>{blouse}</dd>
+                          </div>
+                        )}
+                        {jewellery && (
+                          <div>
+                            <dt>Accessory pairing</dt>
+                            <dd>{jewellery}</dd>
+                          </div>
+                        )}
+                        {colour && (
+                          <div>
+                            <dt>Colour analysis</dt>
+                            <dd>{colour}</dd>
+                          </div>
+                        )}
+                      </dl>
                     </div>
-                    <div>
-                      <dt>Accessory pairing</dt>
-                      <dd>{String(aiResult?.jewellery_pairing || 'No accessory pairing returned by the AI provider.')}</dd>
-                    </div>
-                    <div>
-                      <dt>Colour analysis</dt>
-                      <dd>{String(aiResult?.colour_analysis || 'No colour analysis returned by the AI provider.')}</dd>
-                    </div>
-                  </dl>
-                </div>
+                  );
+                })()}
+
                 {suggestedProduct && (
                   <div className="tryon-suggestion">
                     <ProductVisual product={suggestedProduct} className="tryon-suggestion-img" />
                     <div>
-                      <span>Suggested live SKU</span>
+                      <span>This saree</span>
                       <strong>{suggestedProduct.name}</strong>
                       <small>Rs {Number(suggestedProduct.price).toLocaleString('en-IN')}</small>
                     </div>
                   </div>
                 )}
+
                 <div className="tryon-actions">
-                  <button type="button" onClick={() => navigate('/womens')}>Browse sarees</button>
+                  <button type="button" onClick={() => navigate('/womens')}>Browse more sarees</button>
                   <button type="button" className="primary" onClick={() => void addSuggested()}>
                     <ShoppingCart size={16} />
-                    Add suggested saree
+                    Add to cart
                   </button>
                 </div>
               </>

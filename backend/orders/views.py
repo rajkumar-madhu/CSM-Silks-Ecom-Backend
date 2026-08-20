@@ -114,9 +114,16 @@ class OrderDetailView(APIView):
 def render_invoice_html(order: Order) -> str:
     address = order.shipping_address_snapshot or {}
     item_rows = "".join(
-        f"<tr><td>{item.product_name}<br><small>{item.product_sku}</small></td><td>{item.quantity}</td><td>Rs {item.unit_price}</td><td>Rs {item.subtotal}</td></tr>"
+        f"<tr><td>{item.product_name}<br><small>{item.product_sku}"
+        f"{' · blouse stitch ' + item.blouse_size if item.blouse_stitching else ''}"
+        f"{' · fall/pico' if item.fall_pico else ''}</small></td>"
+        f"<td>{item.quantity}</td><td>Rs {item.unit_price}</td><td>Rs {item.subtotal}</td></tr>"
         for item in order.items.all()
     )
+    # Order.subtotal already includes finishing_amount (see orders.services.create_order_from_cart),
+    # so the invoice must print the goods-only figure or the printed lines overstate the total by
+    # the finishing fee. goods_subtotal equals the sum of the item rows above.
+    goods_subtotal = order.subtotal - order.finishing_amount
     return f"""<!doctype html>
 <html>
 <head><meta charset="utf-8"><title>Invoice {order.order_number}</title></head>
@@ -135,7 +142,8 @@ def render_invoice_html(order: Order) -> str:
     <thead><tr><th align="left">Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
     <tbody>{item_rows}</tbody>
   </table>
-  <p><strong>Subtotal:</strong> Rs {order.subtotal}</p>
+  <p><strong>Subtotal:</strong> Rs {goods_subtotal}</p>
+  <p><strong>House finishing:</strong> Rs {order.finishing_amount}</p>
   <p><strong>Discount:</strong> Rs {order.discount_amount}</p>
   <p><strong>CGST:</strong> Rs {order.cgst_amount}</p>
   <p><strong>SGST:</strong> Rs {order.sgst_amount}</p>

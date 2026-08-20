@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Bell, Heart, Home, MapPin, Menu, Moon, Search, Shirt, ShoppingBag, Sparkles, Sun, Truck, UserRound, X } from 'lucide-react';
+import { Bell, Heart, MapPin, Menu, Moon, Search, ShoppingBag, Sun, UserRound, X } from 'lucide-react';
 import { BrandMark } from '@/ui/components';
 import { getDeliveryPin, normalizeDeliveryPin, setDeliveryPin, DELIVERY_PIN_EVENT } from '@/lib/deliveryPin';
 import { useApp } from '@/store/AppContext';
@@ -42,18 +42,17 @@ export function Navbar() {
     };
   }, [mobileOpen]);
 
-  const isActive = (path: string) => location.pathname === path;
   const closeAndGo = (path: string) => {
     navigate(path);
     setMobileOpen(false);
   };
 
-  const navItems = [
-    { path: '/', label: 'Home', icon: Home },
-    { path: '/womens', label: 'Women', icon: Sparkles },
-    { path: '/mens', label: 'Men', icon: Shirt },
-    { path: '/search', label: 'Search', icon: Search },
-    { path: '/tracking', label: 'Track', icon: Truck },
+  const primaryLinks = [
+    { path: '/womens', label: 'Women', match: (p: string, s: string) => p.startsWith('/womens') && !s.includes('category=bridal') && !s.includes('category=festive') },
+    { path: '/mens', label: 'Men', match: (p: string) => p.startsWith('/mens') },
+    { path: '/womens?category=bridal', label: 'Bridal', match: (_p: string, s: string) => s.includes('category=bridal') },
+    { path: '/womens?category=festive', label: 'New in', match: (_p: string, s: string) => s.includes('category=festive') },
+    { path: '/tracking', label: 'Track order', match: (p: string) => p.startsWith('/tracking') },
   ];
 
   const submitSearch = (event: FormEvent) => {
@@ -72,38 +71,22 @@ export function Navbar() {
 
   return (
     <>
-      <nav className="nav">
+      <nav className="nav nav--union">
         <button type="button" className="nav-logo" onClick={() => navigate('/')} aria-label="Go to CSM Silks home">
           <BrandMark />
         </button>
 
-        <div className="nav-location-wrap">
-          <button
-            type="button"
-            className="nav-location"
-            onClick={() => {
-              setPinDraft(deliveryPin);
-              setPinEditorOpen(open => !open);
-            }}
-            aria-expanded={pinEditorOpen}
-            aria-label="Update delivery PIN code"
-          >
-            <MapPin size={16} />
-            <span>Deliver to {deliveryPin || 'PIN'}</span>
-          </button>
-          {pinEditorOpen && (
-            <form className="nav-pin-editor" onSubmit={submitDeliveryPin}>
-              <input
-                value={pinDraft}
-                onChange={event => setPinDraft(normalizeDeliveryPin(event.target.value))}
-                placeholder="6-digit PIN"
-                inputMode="numeric"
-                maxLength={6}
-                aria-label="Delivery PIN code"
-              />
-              <button type="submit">Update</button>
-            </form>
-          )}
+        <div className="nav-primary">
+          {primaryLinks.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              className={`nav-primary-link ${item.match(location.pathname, location.search) ? 'on' : ''}`}
+              onClick={() => navigate(item.path)}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
 
         <form className="nav-search" onSubmit={submitSearch}>
@@ -112,24 +95,36 @@ export function Navbar() {
           <button type="submit">Search</button>
         </form>
 
-        <div className="nav-links">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.path}
-                className={`nav-link ${isActive(item.path) ? 'on' : ''}`}
-                type="button"
-                onClick={() => navigate(item.path)}
-              >
-                <Icon size={16} />
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
-
         <div className="nav-actions">
+          <div className="nav-location-wrap">
+            <button
+              type="button"
+              className="nav-location"
+              onClick={() => {
+                setPinDraft(deliveryPin);
+                setPinEditorOpen(open => !open);
+              }}
+              aria-expanded={pinEditorOpen}
+              aria-label="Update delivery PIN code"
+            >
+              <MapPin size={15} />
+              <span>{deliveryPin || 'PIN'}</span>
+            </button>
+            {pinEditorOpen && (
+              <form className="nav-pin-editor" onSubmit={submitDeliveryPin}>
+                <input
+                  value={pinDraft}
+                  onChange={event => setPinDraft(normalizeDeliveryPin(event.target.value))}
+                  placeholder="6-digit PIN"
+                  inputMode="numeric"
+                  maxLength={6}
+                  aria-label="Delivery PIN code"
+                />
+                <button type="submit">Update</button>
+              </form>
+            )}
+          </div>
+
           <button
             type="button"
             className="nav-icon-btn theme-toggle"
@@ -155,7 +150,6 @@ export function Navbar() {
           <button type="button" className="nav-icon-btn" onClick={() => navigate(isAuthed ? '/account' : '/login')} aria-label={isAuthed ? 'Account' : 'Login'}>
             <UserRound size={18} />
           </button>
-          <button type="button" className="nav-cta" onClick={() => navigate('/womens')}>Shop silk</button>
           <button type="button" className="nav-mob-menu" onClick={() => setMobileOpen(true)} aria-label="Open menu">
             <Menu size={20} />
           </button>
@@ -183,34 +177,25 @@ export function Navbar() {
           />
           <button type="submit">Go</button>
         </form>
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button type="button" key={item.path} className="mm-link" onClick={() => closeAndGo(item.path)}>
-              <Icon size={18} />
-              {item.label}
-            </button>
-          );
-        })}
+        {primaryLinks.map((item) => (
+          <button type="button" key={item.label} className="mm-link" onClick={() => closeAndGo(item.path)}>
+            {item.label}
+          </button>
+        ))}
         <button type="button" className="mm-link" onClick={() => closeAndGo('/orders')}>
-          <ShoppingBag size={18} />
           My orders
         </button>
         <button type="button" className="mm-link" onClick={() => closeAndGo('/wishlist')}>
-          <Heart size={18} />
           Wishlist
         </button>
         <button type="button" className="mm-link" onClick={() => closeAndGo('/notifications')}>
-          <Bell size={18} />
           Notifications
           {unreadNotifications > 0 && <span className="mm-badge">{unreadNotifications}</span>}
         </button>
         <button type="button" className="mm-link" onClick={() => closeAndGo(isAuthed ? '/account' : '/login')}>
-          <UserRound size={18} />
           {isAuthed ? 'Account' : 'Login / Signup'}
         </button>
         <button type="button" className="mm-link" onClick={toggleTheme} aria-pressed={isDark}>
-          {isDark ? <Sun size={18} /> : <Moon size={18} />}
           {isDark ? 'Light mode' : 'Dark mode'}
         </button>
       </div>

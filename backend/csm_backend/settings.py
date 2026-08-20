@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import secrets
 from datetime import timedelta
+from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -36,7 +38,17 @@ IS_PRODUCTION = APP_ENV == "production"
 if not SECRET_KEY:
     if IS_PRODUCTION:
         raise ValueError("SECRET_KEY environment variable must be set in production")
-    SECRET_KEY = "dev-secret-key-change-in-production-min-32-chars"
+    if DEBUG:
+        # Stable so dev sessions survive an autoreload. Only ever reachable with DEBUG=True.
+        SECRET_KEY = "dev-secret-key-change-in-production-min-32-chars"
+    else:
+        # DEBUG=False without APP_ENV=production is the ambiguous case: it covers CI and
+        # ad-hoc management commands, but it also covers a real deploy that simply forgot
+        # to set APP_ENV. Falling back to the literal above would have signed that deploy's
+        # sessions, CSRF tokens and JWTs with a key committed to this repo. An ephemeral
+        # random key keeps those commands working while making a silent insecure serve
+        # impossible — anything that needs key continuity has to set SECRET_KEY.
+        SECRET_KEY = secrets.token_urlsafe(64)
 
 if IS_PRODUCTION and DEBUG:
     raise ValueError("DEBUG cannot be True in production. Set DEBUG=False in environment variables.")
@@ -77,6 +89,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -123,7 +136,8 @@ def database_config() -> dict:
             "HOST": parsed.hostname or "localhost",
             "PORT": str(parsed.port or 5432),
             "OPTIONS": {
-                "sslmode": "require" if IS_PRODUCTION else "allow",
+                # "prefer" silently falls back to an unencrypted connection; production must not.
+                "sslmode": os.getenv("PGSSLMODE", "require" if IS_PRODUCTION else "prefer"),
             },
         }
     if parsed.scheme in {"postgresql+asyncpg", "postgres+asyncpg"}:
@@ -135,7 +149,8 @@ def database_config() -> dict:
             "HOST": parsed.hostname or "localhost",
             "PORT": str(parsed.port or 5432),
             "OPTIONS": {
-                "sslmode": "require" if IS_PRODUCTION else "allow",
+                # "prefer" silently falls back to an unencrypted connection; production must not.
+                "sslmode": os.getenv("PGSSLMODE", "require" if IS_PRODUCTION else "prefer"),
             },
         }
     if IS_PRODUCTION:
@@ -164,8 +179,21 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-MEDIA_URL = "media/"
-MEDIA_ROOT = BASE_DIR / "media"
+# Django replaces STORAGES wholesale (no per-key merge with global_settings), so "default"
+# must be declared here too — omitting it makes default_storage raise InvalidStorageError,
+# which breaks every FileField/ImageField save (e.g. admin product-image upload).
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+MEDIA_URL = os.getenv("MEDIA_URL", "/media/")
+if not MEDIA_URL.endswith("/"):
+    MEDIA_URL = f"{MEDIA_URL}/"
+MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", str(BASE_DIR / "media")))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 APPEND_SLASH = False
@@ -227,7 +255,9 @@ REST_FRAMEWORK = {
         "user": os.getenv("DRF_USER_THROTTLE", "1000/hour" if IS_PRODUCTION else "5000/hour"),
         "otp": os.getenv("DRF_OTP_THROTTLE", "3/minute" if IS_PRODUCTION else "120/minute"),
         "admin_login": os.getenv("DRF_ADMIN_LOGIN_THROTTLE", "5/minute" if IS_PRODUCTION else "10/minute"),
-        "tracking": os.getenv("DRF_TRACKING_THROTTLE", "10/minute" if IS_PRODUCTION else "5/minute"),
+        # Production is the stricter side, as with every other scope here. This pair was
+        # inverted (10/minute prod vs 5/minute dev), making dev the tighter environment.
+        "tracking": os.getenv("DRF_TRACKING_THROTTLE", "10/minute" if IS_PRODUCTION else "30/minute"),
         "courier_webhook": os.getenv("DRF_COURIER_WEBHOOK_THROTTLE", "60/minute" if IS_PRODUCTION else "120/minute"),
         "payment": os.getenv("DRF_PAYMENT_THROTTLE", "10/minute" if IS_PRODUCTION else "30/minute"),
         "checkout": os.getenv("DRF_CHECKOUT_THROTTLE", "20/hour" if IS_PRODUCTION else "100/hour"),
@@ -252,6 +282,8 @@ GST_RATE = float(os.getenv("GST_RATE", "0.05"))
 CGST_RATE = GST_RATE / 2
 SGST_RATE = GST_RATE / 2
 HSN_CODE = os.getenv("HSN_CODE", "5007")
+BLOUSE_STITCH_FEE = Decimal(os.getenv("BLOUSE_STITCH_FEE", "350"))
+FALL_PICO_FEE = Decimal(os.getenv("FALL_PICO_FEE", "150"))
 STORE_CONTACT_EMAIL = os.getenv("STORE_CONTACT_EMAIL", "orders@csmsilks.com")
 FREE_SHIPPING_THRESHOLD = float(os.getenv("FREE_SHIPPING_THRESHOLD", "999"))
 LOYALTY_POINTS_PER_RUPEE = float(os.getenv("LOYALTY_POINTS_PER_RUPEE", "0.05"))
@@ -317,6 +349,16 @@ GUPSHUP_APP_NAME = os.getenv("GUPSHUP_APP_NAME", "")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+
+REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "")
+VIRTUAL_TRYON_MODEL = os.getenv("VIRTUAL_TRYON_MODEL", "yisol/idm-vton")
+VIRTUAL_TRYON_ENABLED = bool(REPLICATE_API_TOKEN)
+# Keep below ingress-nginx's proxy_read_timeout (60s) so the customer gets a real answer
+# instead of a 504 while the Replicate job runs on.
+AI_VTON_TIMEOUT_SECONDS = int(os.getenv("AI_VTON_TIMEOUT_SECONDS", "45"))
+AI_MAX_IMAGE_BYTES = int(os.getenv("AI_MAX_IMAGE_BYTES", str(8 * 1024 * 1024)))
+# Try-on uploads are photos of real people on a public endpoint; purge them on a schedule.
+AI_TRYON_PHOTO_RETENTION_DAYS = int(os.getenv("AI_TRYON_PHOTO_RETENTION_DAYS", "30"))
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
@@ -406,8 +448,15 @@ os.makedirs(BASE_DIR / "logs", exist_ok=True)
 SENTRY_DSN = os.getenv("SENTRY_DSN", "")
 SENTRY_TRACES_SAMPLE_RATE = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
 
-# Validate environment on startup
-if IS_PRODUCTION:
+# Validate environment on startup.
+#
+# NOTE: SKIP_ENV_VALIDATION is load-bearing — the wecrew deployment sets it to "true" in
+# ECOM/k8s-wecrew/30-backend.yaml (a different repo from this one) because the cluster runs
+# without live Razorpay credentials. Removing this gate crashloops the production backend.
+# It is still a blunt instrument: it disables every startup guard, not just the payments one.
+# The right fix is to make env_validation require provider creds only when that provider is
+# enabled, then drop this flag — do that before removing the escape hatch.
+if IS_PRODUCTION and not env_bool("SKIP_ENV_VALIDATION", False):
     from .env_validation import validate_on_startup
     validate_on_startup()
 

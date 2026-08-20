@@ -27,7 +27,7 @@ Frontend runs on `http://localhost:5173` and proxies `/api` and `/ws` to the Dja
 | Django migration | `python backend/manage.py makemigrations` |
 | Django migrate | `python backend/manage.py migrate` |
 | Backend check | `python backend/manage.py check` |
-| Backend tests | `python backend/manage.py test accounts catalog cart orders payments inventory loyalty notifications analytics shipping reviews ai` |
+| Backend tests (**run from `backend/`**) | `cd backend && SECURE_SSL_REDIRECT=false python manage.py test accounts catalog cart orders payments inventory loyalty notifications analytics shipping reviews ai csm_backend` |
 | Docker up (dev) | `docker compose up` |
 | Docker up (prod) | `docker compose -f docker-compose.prod.yml up` |
 | Frontend lint | `cd frontend && npm run lint` |

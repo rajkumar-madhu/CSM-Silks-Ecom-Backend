@@ -1,238 +1,302 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { ArrowRight, BadgeCheck, CreditCard, MessageCircle, PackageCheck, Search, ShieldCheck, ShoppingBag, Star, Truck, UserRound } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowRight, ChevronLeft, ChevronRight, MapPin, MessageCircle, ShieldCheck, Star, Store, Truck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ProductCard } from '@/features/catalog/components/ProductCard';
-import { ProductVisual, SectionHeader } from '@/ui/components';
 import { api } from '@/lib/api';
-import { useApp } from '@/store/AppContext';
 import type { Product } from '@/types';
 
-const collectionTiles = [
-  { title: 'Kanjivaram sarees', text: 'Temple borders, rich zari, heirloom wedding pieces.', path: '/womens', tone: 'ruby' },
-  { title: 'Bridal edits', text: 'Curated silk sarees with blouse options and verified stock.', path: '/womens', tone: 'gold' },
-  { title: "Men's silk", text: 'Dhotis, veshtis, shirts, and wedding sets for him.', path: '/mens', tone: 'green' },
-  { title: 'Daily silk', text: 'Lighter silk picks for gifting, puja, and everyday occasions.', path: '/womens', tone: 'indigo' },
+type GenderTab = 'women' | 'men';
+type ProductTab = 'bestsellers' | 'newin';
+
+const heroSlides = [
+  {
+    kicker: 'Wear the silk',
+    title: "Women's ethnic fusion",
+    subtitle: 'Kanjivaram, bridal zari, and festive edits',
+    path: '/womens',
+    tone: 'ruby' as const,
+    gender: 'women' as const,
+    image: '/images/catalog/hero-women.jpg',
+  },
+  {
+    kicker: 'Crafted for him',
+    title: "Men's silk wear",
+    subtitle: 'Dhotis, veshtis, shirts, and wedding sets',
+    path: '/mens',
+    tone: 'green' as const,
+    gender: 'men' as const,
+    image: '/images/catalog/hero-men.jpg',
+  },
+  {
+    kicker: 'Bridal season',
+    title: 'Wedding silk edits',
+    subtitle: 'Heirloom sarees with blouse pairing',
+    path: '/womens?category=bridal',
+    tone: 'gold' as const,
+    gender: 'women' as const,
+    image: '/images/catalog/bridal-ruby.jpg',
+  },
 ];
 
-const trustItems = [
-  { icon: ShieldCheck, title: 'GI-tagged silk', text: 'Authenticity-first product details.' },
-  { icon: PackageCheck, title: 'Live inventory', text: 'SKU-level stock for color and fabric.' },
-  { icon: Truck, title: 'India shipping', text: 'Track orders from processing to delivery.' },
-  { icon: CreditCard, title: 'Razorpay or COD', text: 'Secure prepaid checkout or cash on delivery.' },
+const stats = [
+  { icon: Store, value: '50+', label: 'Years of silk craft' },
+  { icon: ShieldCheck, value: 'GI', label: 'Tagged authenticity' },
+  { icon: Star, value: '4.8+', label: 'Customer rating' },
+  { icon: Truck, value: 'PAN', label: 'India delivery' },
 ];
 
-function productPath(product?: Product) {
-  if (!product) return '/womens';
-  return `/product/${product.gender === 'men' ? 'mens' : 'womens'}/${product.slug}`;
-}
+const collectionBanners = [
+  { title: 'Kanjivaram sarees', path: '/womens?category=kanjivaram', tone: 'ruby' as const },
+  { title: 'Bridal collection', path: '/womens?category=bridal', tone: 'gold' as const },
+  { title: "Men's wedding sets", path: '/mens?category=set', tone: 'green' as const },
+];
 
-function formatINR(value?: number) {
-  return `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
-}
+const categoryChips = [
+  { label: 'Kanjivaram', path: '/womens?category=kanjivaram' },
+  { label: 'Bridal', path: '/womens?category=bridal' },
+  { label: 'Festive', path: '/womens?category=festive' },
+  { label: 'Daily silk', path: '/womens?category=daily' },
+  { label: 'Dhotis', path: '/mens?category=dhoti' },
+  { label: 'Veshtis', path: '/mens?category=veshti' },
+  { label: 'Silk shirts', path: '/mens?category=shirt' },
+  { label: 'Wedding sets', path: '/mens?category=set' },
+];
 
 export function Home() {
   const navigate = useNavigate();
-  const { addToCart, isAuthed } = useApp();
-  const [womens, setWomens] = useState<Product[]>([]);
-  const [mens, setMens] = useState<Product[]>([]);
-  const [heroQuery, setHeroQuery] = useState('');
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [genderTab, setGenderTab] = useState<GenderTab>('women');
+  const [productTab, setProductTab] = useState<ProductTab>('bestsellers');
+  const [womenBestsellers, setWomenBestsellers] = useState<Product[]>([]);
+  const [womenNew, setWomenNew] = useState<Product[]>([]);
+  const [menBestsellers, setMenBestsellers] = useState<Product[]>([]);
+  const [menNew, setMenNew] = useState<Product[]>([]);
 
   useEffect(() => {
     Promise.all([
-      api.products.list({ gender: 'women', featured: true, per_page: 6 }),
-      api.products.list({ gender: 'men', per_page: 4 }),
-    ]).then(([womenData, menData]) => {
-      setWomens(womenData.items);
-      setMens(menData.items);
+      api.products.list({ gender: 'women', featured: true, per_page: 8 }),
+      api.products.list({ gender: 'women', sort: 'newest', per_page: 8 }),
+      api.products.list({ gender: 'men', featured: true, per_page: 8 }),
+      api.products.list({ gender: 'men', sort: 'newest', per_page: 8 }),
+    ]).then(([wb, wn, mb, mn]) => {
+      setWomenBestsellers(wb.items);
+      setWomenNew(wn.items);
+      setMenBestsellers(mb.items);
+      setMenNew(mn.items);
     }).catch(() => {
-      setWomens([]);
-      setMens([]);
+      setWomenBestsellers([]);
+      setWomenNew([]);
+      setMenBestsellers([]);
+      setMenNew([]);
     });
   }, []);
 
-  const heroProduct = womens[0] || mens[0];
-  const liveCount = womens.length + mens.length;
-  const stockCount = Number(heroProduct?.available_qty || 0);
-  const discount = heroProduct?.mrp && heroProduct.mrp > heroProduct.price
-    ? Math.max(0, Math.round((1 - heroProduct.price / heroProduct.mrp) * 100))
-    : 0;
-  const rating = Number(heroProduct?.avg_rating || 0);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setActiveSlide(current => (current + 1) % heroSlides.length);
+    }, 5500);
+    return () => window.clearInterval(timer);
+  }, []);
 
-  const submitHeroSearch = (event: FormEvent) => {
-    event.preventDefault();
-    const query = heroQuery.trim();
-    navigate(query ? `/search?q=${encodeURIComponent(query)}` : '/search');
-  };
-
-  const addFeaturedToCart = async () => {
-    if (!heroProduct) {
-      navigate('/womens');
-      return;
+  const lovedProducts = useMemo(() => {
+    if (genderTab === 'women') {
+      return productTab === 'bestsellers' ? womenBestsellers : womenNew;
     }
-    await addToCart(heroProduct);
+    return productTab === 'bestsellers' ? menBestsellers : menNew;
+  }, [genderTab, productTab, womenBestsellers, womenNew, menBestsellers, menNew]);
+
+  const moveSlide = (direction: -1 | 1) => {
+    setActiveSlide(current => (current + direction + heroSlides.length) % heroSlides.length);
   };
+
+  const viewAllPath = genderTab === 'women' ? '/womens' : '/mens';
 
   return (
-    <div className="storefront">
-      <section className="hero">
-        <div className="hero-content">
-          <div className="hero-copy">
-            <h1>Pure silk shopping, from product to delivery.</h1>
-            <p className="hero-lede">
-              Browse real CSM Silks inventory with product photos, GST invoices, OTP-secured
-              checkout, Razorpay/COD payments, and shipment tracking.
-            </p>
-            <form className="hero-search" onSubmit={submitHeroSearch} role="search">
-              <Search size={18} />
-              <input
-                value={heroQuery}
-                onChange={event => setHeroQuery(event.target.value)}
-                placeholder="Search sarees, dhotis, silk shirts, festive colors"
-                aria-label="Search CSM Silks products"
-              />
-              <button type="submit">Search</button>
-            </form>
-            <div className="hero-actions">
-              <button className="btn btn-primary" onClick={() => navigate('/womens')}>
-                Shop women <ArrowRight size={17} />
-              </button>
-              <button className="btn btn-secondary" onClick={() => navigate('/mens')}>
-                Shop men
-              </button>
-              <button className="btn btn-ghost hero-account-action" onClick={() => navigate(isAuthed ? '/account' : '/signup')}>
-                <UserRound size={17} />
-                {isAuthed ? 'My account' : 'Create account'}
-              </button>
-            </div>
-            <div className="hero-market-row">
-              {collectionTiles.map((tile) => (
-                <button key={tile.title} onClick={() => navigate(tile.path)}>
-                  <strong>{tile.title}</strong>
-                  <span>{tile.text}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="hero-showcase">
-            <div className="hero-showcase-card">
-              <div className="hero-showcase-top">
-                <span>Live featured pick</span>
-                <BadgeCheck size={18} />
+    <div className="storefront storefront--union">
+      <section className="su-hero" aria-label="Featured collections">
+        <div className="su-hero-track" style={{ transform: `translateX(-${activeSlide * 100}%)` }}>
+          {heroSlides.map((slide, index) => (
+            <button
+              key={slide.title}
+              type="button"
+              className={`su-hero-slide su-hero-slide--${slide.tone}`}
+              onClick={() => navigate(slide.path)}
+              aria-label={`Shop ${slide.title}`}
+            >
+              <img className="su-hero-slide-photo" src={slide.image} alt="" aria-hidden="true" />
+              <div className="su-hero-slide-shade" aria-hidden="true" />
+              <div className="su-hero-slide-copy">
+                <span>{slide.kicker}</span>
+                <h1>{slide.title}</h1>
+                <p>{slide.subtitle}</p>
+                <em>Shop now</em>
               </div>
-              <button className="hero-image-button" type="button" onClick={() => navigate(productPath(heroProduct))}>
-                <ProductVisual product={heroProduct} className="hero-visual hero-product-image" />
-              </button>
-              <div className="hero-showcase-info">
-                <div>
-                  <strong>{heroProduct?.name || 'Catalog waiting for live products'}</strong>
-                  <span>
-                    {heroProduct
-                      ? `${heroProduct.cat || 'CSM catalog'} - ${stockCount > 0 ? `${stockCount} in stock` : 'Stock pending'}`
-                      : 'No published API product returned yet'}
-                  </span>
-                </div>
-                <div className="hero-price-stack">
-                  {heroProduct && <strong>{formatINR(heroProduct.price)}</strong>}
-                  {heroProduct?.mrp && heroProduct.mrp > heroProduct.price && <span>{formatINR(heroProduct.mrp)}</span>}
-                </div>
-              </div>
-              {heroProduct ? (
-                <div className="hero-product-proof">
-                  <span><Star size={14} fill="currentColor" /> {rating ? rating.toFixed(1) : 'New'} rating</span>
-                  <span>{discount > 0 ? `${discount}% off` : 'Assured stock'}</span>
-                  <span>Delivery {heroProduct.delivery_min_days || 2}-{heroProduct.delivery_max_days || 6} days</span>
-                </div>
-              ) : (
-                <div className="hero-product-proof">
-                  <span>Connect catalog API</span>
-                  <span>Publish products in admin</span>
-                  <span>Customer card stays empty until live data arrives</span>
-                </div>
-              )}
-              <div className="hero-showcase-actions">
-                <button type="button" onClick={() => void addFeaturedToCart()} disabled={!heroProduct}>
-                  <ShoppingBag size={17} />
-                  Add to cart
-                </button>
-                <button type="button" className="secondary" onClick={() => navigate(productPath(heroProduct))}>
-                  {heroProduct ? 'View details' : 'Open catalog'}
-                </button>
-              </div>
-            </div>
-            <div className="hero-mini-panel">
-              <span>Today at CSM</span>
-              <strong>{liveCount} live picks</strong>
-              <p>Cart, checkout, payments, order tracking, and delivery updates are connected.</p>
-            </div>
-          </div>
+              <span className="su-hero-slide-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+            </button>
+          ))}
         </div>
+
+        <div className="su-hero-controls">
+          <button type="button" className="su-hero-nav" onClick={() => moveSlide(-1)} aria-label="Previous slide">
+            <ChevronLeft size={20} />
+          </button>
+          <div className="su-hero-dots" role="tablist" aria-label="Hero slides">
+            {heroSlides.map((slide, index) => (
+              <button
+                key={slide.title}
+                type="button"
+                role="tab"
+                aria-selected={activeSlide === index}
+                className={activeSlide === index ? 'on' : ''}
+                onClick={() => setActiveSlide(index)}
+                aria-label={`Go to slide ${index + 1}`}
+              />
+            ))}
+          </div>
+          <button type="button" className="su-hero-nav" onClick={() => moveSlide(1)} aria-label="Next slide">
+            <ChevronRight size={20} />
+          </button>
+        </div>
+
+        <a className="su-hero-scroll" href="#most-loved">
+          <ArrowDown size={18} />
+          Scroll
+        </a>
       </section>
 
-      <section className="trust-band">
-        {trustItems.map((item) => {
+      <section className="su-stats" aria-label="Store highlights">
+        {stats.map((item) => {
           const Icon = item.icon;
           return (
-            <div key={item.title} className="trust-item">
-              <Icon size={21} />
-              <div>
-                <strong>{item.title}</strong>
-                <span>{item.text}</span>
-              </div>
+            <div key={item.label} className="su-stat">
+              <Icon size={22} aria-hidden="true" />
+              <strong>{item.value}</strong>
+              <span>{item.label}</span>
             </div>
           );
         })}
       </section>
 
-      <section className="section surface-section">
-        <SectionHeader
-          label="Shop by collection"
-          title="Textile edits for"
-          accent="every occasion"
-          description="Move through the store the way customers shop: occasion, fabric, color, stock, then checkout."
-          tone="light"
-        />
-        <div className="collection-grid">
-          {collectionTiles.map((tile) => (
-            <button key={tile.title} className={`collection-tile ${tile.tone}`} onClick={() => navigate(tile.path)}>
-              <span>{tile.title}</span>
-              <p>{tile.text}</p>
-              <ArrowRight size={18} />
+      <section className="su-loved" id="most-loved">
+        <div className="su-loved-head">
+          <div className="su-loved-title">
+            <span>{genderTab === 'men' ? 'Men' : 'Women'}</span>
+            <h2>
+              Most
+              <br />
+              Loved
+              <br />
+              styles
+            </h2>
+          </div>
+
+          <div className="su-loved-controls">
+            <div className="su-gender-tabs" role="tablist" aria-label="Shop by gender">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={genderTab === 'men'}
+                className={genderTab === 'men' ? 'on' : ''}
+                onClick={() => setGenderTab('men')}
+              >
+                Men
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={genderTab === 'women'}
+                className={genderTab === 'women' ? 'on' : ''}
+                onClick={() => setGenderTab('women')}
+              >
+                Women
+              </button>
+            </div>
+
+            <div className="su-product-tabs" role="tablist" aria-label="Product filters">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={productTab === 'bestsellers'}
+                className={productTab === 'bestsellers' ? 'on' : ''}
+                onClick={() => setProductTab('bestsellers')}
+              >
+                Best sellers
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={productTab === 'newin'}
+                className={productTab === 'newin' ? 'on' : ''}
+                onClick={() => setProductTab('newin')}
+              >
+                New in
+              </button>
+            </div>
+
+            <button type="button" className="su-view-all" onClick={() => navigate(viewAllPath)}>
+              View all <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+
+        <div className="su-product-rail" key={`${genderTab}-${productTab}`}>
+          {lovedProducts.length > 0 ? (
+            lovedProducts.map(product => (
+              <ProductCard key={product.id} product={product} layout="retail" />
+            ))
+          ) : (
+            <div className="su-empty-rail">
+              <p>Live catalog picks will appear here once products are published.</p>
+              <button type="button" className="btn btn-primary" onClick={() => navigate(viewAllPath)}>
+                Browse {genderTab === 'women' ? 'women' : 'men'}
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="su-banners" aria-label="Shop by collection">
+        {collectionBanners.map((banner) => (
+          <button
+            key={banner.title}
+            type="button"
+            className={`su-banner su-banner--${banner.tone}`}
+            onClick={() => navigate(banner.path)}
+          >
+            <span>Collection</span>
+            <strong>{banner.title}</strong>
+            <em>Explore <ArrowRight size={16} /></em>
+          </button>
+        ))}
+      </section>
+
+      <section className="su-categories">
+        <div className="su-categories-head">
+          <h3>Shop by category</h3>
+          <p>Quick entry points across women&apos;s sarees and men&apos;s silk.</p>
+        </div>
+        <div className="su-category-chips">
+          {categoryChips.map(chip => (
+            <button key={chip.label} type="button" onClick={() => navigate(chip.path)}>
+              {chip.label}
             </button>
           ))}
         </div>
       </section>
 
-      <section className="section">
-        <SectionHeader
-          label="Best sellers"
-          title="Sarees customers"
-          accent="keep choosing"
-          description="Live pricing, available colors, wishlist, and cart actions for repeat shopping."
-        />
-        <div className="pg">
-          {womens.map((product) => <ProductCard key={product.id} product={product} />)}
+      <section className="su-assist">
+        <div>
+          <span>Need help choosing?</span>
+          <h3>Talk to our silk stylist on WhatsApp</h3>
+          <p>Share occasion, budget, and color preference. We help with sizing, blouse pairing, and delivery timelines.</p>
         </div>
-      </section>
-
-      <section className="section split-section">
-        <div className="split-copy">
-          <SectionHeader
-            label="Men's silk"
-            title="Wedding-ready"
-            accent="silk for him"
-            description="Dhotis, veshtis, shirts, and coordinated sets that can be processed by the same catalog and stock engine."
-            align="left"
-          />
-          <div className="hero-actions">
-            <button className="btn btn-primary" onClick={() => navigate('/mens')}>Browse men's silk</button>
-            <a className="btn btn-secondary" href="https://wa.me/919876543210?text=Hi%20CSM%20Silks%2C%20I%20need%20help%20choosing%20men%27s%20silk." target="_blank">
-              <MessageCircle size={17} /> WhatsApp help
-            </a>
-          </div>
-        </div>
-        <div className="pg compact-products">
-          {mens.map((product) => <ProductCard key={product.id} product={product} />)}
+        <div className="su-assist-actions">
+          <a className="btn btn-primary" href="https://wa.me/919876543210?text=Hi%20CSM%20Silks%2C%20I%20need%20help%20choosing%20silk." target="_blank" rel="noreferrer noopener">
+            <MessageCircle size={17} /> WhatsApp
+          </a>
+          <button type="button" className="btn btn-secondary" onClick={() => navigate('/tracking')}>
+            <MapPin size={17} /> Track order
+          </button>
         </div>
       </section>
     </div>

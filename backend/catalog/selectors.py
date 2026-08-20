@@ -7,6 +7,13 @@ from django.db.models import F, Prefetch, Q, QuerySet
 from .models import Product, ProductImage, ProductVariant
 
 
+def _split_multi(value) -> list[str]:
+    """Split a comma-separated facet param into clean values ("Red,Blue" -> ["Red", "Blue"])."""
+    if not value:
+        return []
+    return [item.strip() for item in str(value).split(",") if item.strip()]
+
+
 def product_base_queryset() -> QuerySet[Product]:
     return (
         Product.objects.select_related("category")
@@ -56,11 +63,20 @@ def public_products(params) -> QuerySet[Product]:
     if max_price:
         qs = qs.filter(variants__price__lte=max_price).distinct()
     if color:
-        qs = qs.filter(Q(variants__color_name__icontains=color) | Q(variants__color_hex__iexact=color)).distinct()
+        color_q = Q()
+        for value in _split_multi(color):
+            color_q |= Q(variants__color_name__icontains=value) | Q(variants__color_hex__iexact=value)
+        qs = qs.filter(color_q).distinct()
     if fabric:
-        qs = qs.filter(variants__fabric__icontains=fabric).distinct()
+        fabric_q = Q()
+        for value in _split_multi(fabric):
+            fabric_q |= Q(variants__fabric__icontains=value)
+        qs = qs.filter(fabric_q).distinct()
     if occasion:
-        qs = qs.filter(occasions__icontains=occasion)
+        occasion_q = Q()
+        for value in _split_multi(occasion):
+            occasion_q |= Q(occasions__icontains=value)
+        qs = qs.filter(occasion_q)
     if rating:
         qs = qs.filter(avg_rating__gte=rating)
     if discount_min:

@@ -16,6 +16,7 @@ import { api } from '@/lib/api';
 import { useCatalogLiveRefresh } from '@/lib/useCatalogLiveRefresh';
 import { ProductVisual } from '@/ui/components';
 import { editFormFromProduct, primaryVariantId, type AdminEditForm } from '@/lib/adminCatalog';
+import { AdminChoice } from './AdminChoice';
 import type { AdminProductQuickCreatePayload, CatalogCategory, CatalogCollection, Product } from '@/types';
 
 type CatalogTab = 'products' | 'add' | 'collections';
@@ -375,7 +376,7 @@ export function AdminCatalogManager() {
         ].map(([key, Icon, label]) => {
           const IconComp = Icon as typeof Boxes;
           return (
-            <button key={key as string} className={tab === key ? 'active' : ''} onClick={() => setTab(key as CatalogTab)}>
+            <button type="button" key={key as string} className={tab === key ? 'active' : ''} onClick={() => setTab(key as CatalogTab)}>
               <IconComp size={16} /> {label as string}
             </button>
           );
@@ -486,11 +487,15 @@ export function AdminCatalogManager() {
               <label className="admin-field wide">Product name<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Royal Kanjivaram Bridal Saree" /></label>
               <label className="admin-field">Slug<input value={form.slug} onChange={e => setForm({ ...form, slug: toSlug(e.target.value) })} placeholder={toSlug(form.name) || 'auto-created'} /></label>
               <label className="admin-field">Gender
-                <select value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value as Product['gender'] })}>
-                  <option value="women">Women</option>
-                  <option value="men">Men</option>
-                  <option value="unisex">Unisex</option>
-                </select>
+                <AdminChoice
+                  value={form.gender}
+                  onChange={(value) => setForm({ ...form, gender: value })}
+                  options={[
+                    { value: 'women', label: 'Women' },
+                    { value: 'men', label: 'Men' },
+                    { value: 'unisex', label: 'Unisex' },
+                  ]}
+                />
               </label>
               <label className="admin-field">Category
                 <input list="catalog-categories" value={form.category_name} onChange={e => setForm({ ...form, category_name: e.target.value })} />

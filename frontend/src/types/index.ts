@@ -16,6 +16,7 @@ export interface ProductVariant {
   size?: string;
   fabric?: string;
   zari_type?: string;
+  length_meters?: number | string | null;
   care_instructions?: string;
   blouse_included?: boolean;
   price: number | string;
@@ -90,6 +91,7 @@ export interface Product {
   avg_rating?: number | string;
   review_count?: number;
   total_sold?: number;
+  length_meters?: number | string | null;
 }
 
 export interface AdminProductQuickCreatePayload {
@@ -179,6 +181,34 @@ export interface CartResponse {
   free_shipping: boolean;
 }
 
+export interface CartQuoteFinishing {
+  cart_item_id: number;
+  blouse_stitching: boolean;
+  blouse_size: string;
+  fall_pico: boolean;
+}
+
+export interface CartQuoteRequest {
+  finishing?: CartQuoteFinishing[];
+  coupon_code?: string;
+  loyalty_points_to_use?: number;
+}
+
+/** Server-computed checkout totals. Money fields are exact decimal strings. */
+export interface CartQuote {
+  goods_subtotal: string;
+  finishing_total: string;
+  subtotal: string;
+  coupon_discount: string;
+  loyalty_discount: string;
+  taxable: string;
+  cgst: string;
+  sgst: string;
+  shipping: string;
+  total: string;
+  loyalty_points_earned: number;
+}
+
 export interface OrderItem {
   id: number;
   product_id: number;
@@ -189,6 +219,9 @@ export interface OrderItem {
   unit_price: number | string;
   quantity: number;
   subtotal: number | string;
+  blouse_stitching?: boolean;
+  blouse_size?: string;
+  fall_pico?: boolean;
 }
 
 export interface TrackingEvent {
@@ -213,6 +246,8 @@ export interface Order {
   cgst_amount: number | string;
   sgst_amount: number | string;
   shipping_amount: number | string;
+  finishing_amount?: number | string;
+  occasion_note?: string;
   total_amount: number | string;
   courier_name?: string;
   tracking_number?: string;
@@ -380,11 +415,15 @@ export interface Toast {
 
 export interface CatalogFacets {
   categories: CatalogCategory[];
-  colors: Array<{ color_name: string; color_hex: string }>;
+  colors: Array<{ color_name: string; color_hex: string; count?: number }>;
   fabrics: string[];
   occasions: string[];
   price: { min_price: number | string | null; max_price: number | string | null };
   sorts: Array<{ key: string; label: string }>;
+  total?: number;
+  category_counts?: Record<string, number>;
+  fabric_counts?: Array<{ name: string; count: number }>;
+  occasion_counts?: Array<{ name: string; count: number }>;
 }
 
 export interface DeliveryCheck {

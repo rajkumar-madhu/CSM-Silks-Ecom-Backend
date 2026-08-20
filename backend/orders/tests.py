@@ -13,8 +13,14 @@ from catalog.models import Category, Product, ProductVariant
 from inventory.models import StockLedger, StockReservation
 from loyalty.models import LoyaltyTransaction
 from notifications.models import Notification
-from orders.pricing import calculate_gst, calculate_loyalty_points
-from orders.models import Coupon, Order, ReturnRequest
+from datetime import timedelta
+
+from orders.pricing import calculate_coupon_discount, calculate_gst, calculate_loyalty_points
+from django.db.models import F
+
+from orders.models import Coupon, Order, OrderItem, ReturnRequest
+from orders.services import _restock_order_items, _restock_variant
+from orders.views import render_invoice_html
 from payments.models import Payment
 from shipping.models import Shipment, ShipmentEvent
 
@@ -74,6 +80,48 @@ class CheckoutFlowTests(TestCase):
 
         cart_resp = self.client.get("/api/cart")
         self.assertEqual(cart_resp.json()["item_count"], 0)
+
+    def test_checkout_applies_blouse_stitch_fall_pico_and_occasion_note(self):
+        cart = self.client.post("/api/cart", {"variant_id": self.variant.id, "quantity": 1}, format="json")
+        item_id = cart.json()["items"][0]["id"]
+        order_resp = self.client.post(
+            "/api/orders",
+            {
+                "address_id": self.address.id,
+                "payment_method": "cod",
+                "occasion_note": "Daughter's wedding, pack as bridal",
+                "finishing": [{
+                    "cart_item_id": item_id,
+                    "blouse_stitching": True,
+                    "blouse_size": "36",
+                    "fall_pico": True,
+                }],
+            },
+            format="json",
+        )
+        self.assertEqual(order_resp.status_code, 201)
+        body = order_resp.json()
+        self.assertEqual(body["occasion_note"], "Daughter's wedding, pack as bridal")
+        self.assertEqual(Decimal(body["finishing_amount"]), Decimal("500.00"))
+        line = body["items"][0]
+        self.assertTrue(line["blouse_stitching"])
+        self.assertEqual(line["blouse_size"], "36")
+        self.assertTrue(line["fall_pico"])
+
+    def test_checkout_requires_blouse_size_when_stitching(self):
+        cart = self.client.post("/api/cart", {"variant_id": self.variant.id, "quantity": 1}, format="json")
+        item_id = cart.json()["items"][0]["id"]
+        order_resp = self.client.post(
+            "/api/orders",
+            {
+                "address_id": self.address.id,
+                "payment_method": "cod",
+                "finishing": [{"cart_item_id": item_id, "blouse_stitching": True, "blouse_size": "", "fall_pico": False}],
+            },
+            format="json",
+        )
+        self.assertEqual(order_resp.status_code, 400)
+        self.assertIn("blouse size", order_resp.json()["detail"].lower())
 
     def test_checkout_rejects_incomplete_saved_address(self):
         incomplete = Address.objects.create(
@@ -613,3 +661,113 @@ class ProductApiTests(TestCase):
         resp = client.post("/api/admin/product-images", {"image": image}, format="multipart")
         self.assertEqual(resp.status_code, 201)
         self.assertIn("/media/product-images/", resp.json()["image_url"])
+
+
+class CouponFallbackRemovalTests(TestCase):
+    """orders.pricing used to grant CSM10/COMEBACK10 a flat 10% with no Coupon row,
+    so deactivating or expiring those codes in admin had no effect."""
+
+    def test_deactivated_coupon_gives_no_discount(self):
+        Coupon.objects.create(code="CSM10", is_active=False, discount_type=Coupon.DiscountType.PERCENT, value=Decimal("10"))
+        self.assertEqual(calculate_coupon_discount(Decimal("10000.00"), "CSM10"), Decimal("0.00"))
+
+    def test_expired_coupon_gives_no_discount(self):
+        Coupon.objects.create(
+            code="CSM10", is_active=True, discount_type=Coupon.DiscountType.PERCENT, value=Decimal("10"),
+            expires_at=timezone.now() - timedelta(days=30),
+        )
+        self.assertEqual(calculate_coupon_discount(Decimal("10000.00"), "CSM10"), Decimal("0.00"))
+
+    def test_unknown_code_gives_no_discount(self):
+        self.assertEqual(calculate_coupon_discount(Decimal("50.00"), "COMEBACK10"), Decimal("0.00"))
+        self.assertEqual(calculate_coupon_discount(Decimal("50.00"), "  csm10  "), Decimal("0.00"))
+
+    def test_active_coupon_row_still_applies_and_honours_min_order_value(self):
+        Coupon.objects.create(
+            code="CSM10", is_active=True, discount_type=Coupon.DiscountType.PERCENT,
+            value=Decimal("10"), min_order_value=Decimal("1000.00"),
+        )
+        self.assertEqual(calculate_coupon_discount(Decimal("10000.00"), "CSM10"), Decimal("1000.00"))
+        self.assertEqual(calculate_coupon_discount(Decimal("500.00"), "CSM10"), Decimal("0.00"))
+
+
+class InvoiceTotalsTests(TestCase):
+    """Order.subtotal already includes finishing_amount, so printing both lines
+    overstated the invoice by the finishing fee."""
+
+    def test_printed_lines_reconcile_with_total(self):
+        user = User.objects.create_user(username="inv-1", email="inv1@example.com", password="pw123456")
+        order = Order.objects.create(
+            order_number="CSM-INV-1", user=user,
+            subtotal=Decimal("10500.00"),      # 10000 goods + 500 finishing
+            finishing_amount=Decimal("500.00"),
+            discount_amount=Decimal("0.00"),
+            cgst_amount=Decimal("262.50"), sgst_amount=Decimal("262.50"),
+            shipping_amount=Decimal("0.00"),
+            total_amount=Decimal("11025.00"),
+            status=Order.Status.CONFIRMED, payment_method=Order.PaymentMethod.COD,
+        )
+        html = render_invoice_html(order)
+        self.assertIn("<strong>Subtotal:</strong> Rs 10000.00", html)
+        self.assertIn("<strong>House finishing:</strong> Rs 500.00", html)
+
+        printed = (
+            (order.subtotal - order.finishing_amount) + order.finishing_amount
+            - order.discount_amount + order.cgst_amount + order.sgst_amount + order.shipping_amount
+        )
+        self.assertEqual(printed, order.total_amount)
+
+
+class RestockUsesDatabaseArithmeticTests(TestCase):
+    """_restock_order_items did a read-modify-write on an unlocked variant, so a
+    concurrent purchase's decrement was lost and stock inflated."""
+
+    def test_restock_does_not_clobber_a_concurrent_decrement(self):
+        category = Category.objects.create(name="Silk", slug="silk-restock-race")
+        product = Product.objects.create(name="Race Saree", slug="race-saree", category=category, is_active=True, total_sold=5)
+        variant = ProductVariant.objects.create(
+            product=product, sku="RACE-1", price=Decimal("1000.00"), mrp=Decimal("1200.00"), stock_qty=10
+        )
+
+        # These stale in-memory copies stand in for the rows _restock_order_items reads
+        # before it writes. The variant is never locked, so a concurrent purchase can land
+        # in between.
+        stale_variant = ProductVariant.objects.get(pk=variant.pk)
+        stale_product = Product.objects.get(pk=product.pk)
+        self.assertEqual(stale_variant.stock_qty, 10)
+
+        ProductVariant.objects.filter(pk=variant.pk).update(stock_qty=F("stock_qty") - 3)
+        Product.objects.filter(pk=product.pk).update(total_sold=F("total_sold") + 3)
+
+        _restock_variant(stale_variant, stale_product, 2)
+
+        variant.refresh_from_db()
+        product.refresh_from_db()
+        # 10 - 3 (concurrent sale) + 2 (restock) = 9. A read-modify-write off the stale
+        # copy would have written 10 + 2 = 12 and lost the sale.
+        self.assertEqual(variant.stock_qty, 9)
+        # 5 + 3 (concurrent sale) - 2 (restock) = 6, not 5 - 2 = 3.
+        self.assertEqual(product.total_sold, 6)
+
+    def test_restock_floors_total_sold_at_zero(self):
+        user = User.objects.create_user(username="restock-2", email="restock2@example.com", password="pw123456")
+        category = Category.objects.create(name="Silk", slug="silk-restock-floor")
+        product = Product.objects.create(name="Floor Saree", slug="floor-saree", category=category, is_active=True, total_sold=1)
+        variant = ProductVariant.objects.create(
+            product=product, sku="FLOOR-1", price=Decimal("1000.00"), mrp=Decimal("1200.00"), stock_qty=0
+        )
+        order = Order.objects.create(
+            order_number="CSM-FLOOR-1", user=user, subtotal=Decimal("5000.00"), total_amount=Decimal("5000.00"),
+            status=Order.Status.CONFIRMED, payment_method=Order.PaymentMethod.COD,
+        )
+        OrderItem.objects.create(
+            order=order, product=product, variant=variant, product_name=product.name,
+            product_sku=variant.sku, unit_price=Decimal("1000.00"), quantity=5, subtotal=Decimal("5000.00"),
+        )
+
+        _restock_order_items(order)
+
+        product.refresh_from_db()
+        self.assertEqual(product.total_sold, 0)
+        variant.refresh_from_db()
+        self.assertEqual(variant.stock_qty, 5)

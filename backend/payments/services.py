@@ -94,6 +94,24 @@ def append_refund_id(payment, refund_id: str) -> None:
     payment.refund_id = ",".join(known)
 
 
+def validate_refund_amount(*, payment, amount: Decimal) -> Decimal:
+    """Reject a refund amount before any irreversible gateway call is made.
+
+    Callers that talk to the payment provider must run this first — the provider
+    moves real money and a later PaymentReconciliationError only rolls back the
+    local transaction, not the refund.
+    """
+    amount = money(amount)
+    if amount <= 0:
+        raise PaymentReconciliationError("Refund amount must be greater than zero.")
+    if payment.status not in {payment.Status.CAPTURED, payment.Status.PARTIALLY_REFUNDED, payment.Status.REFUNDED}:
+        raise PaymentReconciliationError("Only captured payments can be refunded.")
+    remaining = money(payment.amount - payment.refunded_amount)
+    if amount > remaining:
+        raise PaymentReconciliationError(f"Refund amount exceeds remaining refundable balance of Rs {remaining}.")
+    return amount
+
+
 def apply_refund_reconciliation(*, payment, amount: Decimal, refund_id: str = "", source: str = "manual"):
     from notifications.services import create_notification
     from orders.models import Order
@@ -101,16 +119,11 @@ def apply_refund_reconciliation(*, payment, amount: Decimal, refund_id: str = ""
     from shipping.services import record_tracking_event
 
     amount = money(amount)
-    if amount <= 0:
-        raise PaymentReconciliationError("Refund amount must be greater than zero.")
-    if payment.status not in {payment.Status.CAPTURED, payment.Status.PARTIALLY_REFUNDED, payment.Status.REFUNDED}:
-        raise PaymentReconciliationError("Only captured payments can be refunded.")
+    # Replaying a refund we have already recorded is a no-op, so check that before
+    # validating the amount — a duplicate webhook must not raise "exceeds balance".
     if refund_id and refund_id in payment_known_refunds(payment):
         return payment
-
-    remaining = money(payment.amount - payment.refunded_amount)
-    if amount > remaining:
-        raise PaymentReconciliationError(f"Refund amount exceeds remaining refundable balance of Rs {remaining}.")
+    amount = validate_refund_amount(payment=payment, amount=amount)
 
     payment.refunded_amount = money(payment.refunded_amount + amount)
     append_refund_id(payment, refund_id)

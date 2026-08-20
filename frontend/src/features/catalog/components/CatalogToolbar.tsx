@@ -7,10 +7,16 @@ interface CatalogToolbarProps {
   rating: string;
   availability: boolean;
   maxPrice: string;
+  color?: string;
+  fabric?: string;
+  occasion?: string;
   onSort: (value: string) => void;
   onRating: (value: string) => void;
   onAvailability: (value: boolean) => void;
   onMaxPrice: (value: string) => void;
+  onColor?: (value: string) => void;
+  onFabric?: (value: string) => void;
+  onOccasion?: (value: string) => void;
 }
 
 export function CatalogToolbar({
@@ -19,12 +25,21 @@ export function CatalogToolbar({
   rating,
   availability,
   maxPrice,
+  color = '',
+  fabric = '',
+  occasion = '',
   onSort,
   onRating,
   onAvailability,
   onMaxPrice,
+  onColor,
+  onFabric,
+  onOccasion,
 }: CatalogToolbarProps) {
   const max = Number(facets?.price?.max_price || 25000);
+  const colors = facets?.colors || [];
+  const fabrics = facets?.fabrics || [];
+  const occasions = facets?.occasions || [];
 
   return (
     <div className="catalog-toolbar">
@@ -53,6 +68,28 @@ export function CatalogToolbar({
           <option value="4.5">4.5 stars and above</option>
         </select>
       </label>
+      {onFabric && fabrics.length > 0 && (
+        <label className="catalog-control">
+          <span>Fabric</span>
+          <select value={fabric} onChange={(event) => onFabric(event.target.value)}>
+            <option value="">All fabrics</option>
+            {fabrics.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+      )}
+      {onOccasion && occasions.length > 0 && (
+        <label className="catalog-control">
+          <span>Occasion</span>
+          <select value={occasion} onChange={(event) => onOccasion(event.target.value)}>
+            <option value="">All occasions</option>
+            {occasions.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className="catalog-control catalog-range">
         <span>Max price: Rs {Number(maxPrice || max).toLocaleString('en-IN')}</span>
         <input
@@ -64,6 +101,28 @@ export function CatalogToolbar({
           onChange={(event) => onMaxPrice(event.target.value)}
         />
       </label>
+      {onColor && colors.length > 0 && (
+        <div className="catalog-swatches">
+          <span>Colour</span>
+          <div className="catalog-swatch-row">
+            {colors.map((item) => {
+              const active = color === item.color_name;
+              return (
+                <button
+                  key={`${item.color_name}-${item.color_hex}`}
+                  type="button"
+                  className={`catalog-swatch ${active ? 'on' : ''}`}
+                  style={{ background: item.color_hex || '#c4923a' }}
+                  title={item.color_name}
+                  aria-label={item.color_name}
+                  aria-pressed={active}
+                  onClick={() => onColor(active ? '' : item.color_name)}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
       <label className="catalog-check">
         <input
           type="checkbox"

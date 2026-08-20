@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 
@@ -13,4 +15,5 @@ class RazorpayVerifySerializer(serializers.Serializer):
 
 class RefundSerializer(serializers.Serializer):
     order_id = serializers.IntegerField()
-    amount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    # min_value keeps zero/negative amounts out before they reach the gateway.
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, min_value=Decimal("0.01"))

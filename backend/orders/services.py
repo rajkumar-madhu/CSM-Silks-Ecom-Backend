@@ -4,20 +4,21 @@ import uuid
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import Max
+from django.db.models import F, Max, Value
+from django.db.models.functions import Greatest
 from django.db import transaction
 from django.utils import timezone
 
 from accounts.models import Address
 from cart.models import Cart
-from catalog.models import ProductVariant
+from catalog.models import Product, ProductVariant
 from inventory.models import StockLedger, StockReservation
 from loyalty.models import LoyaltyTransaction
 from notifications.services import create_notification
 from payments.models import Payment
 
 from .models import Order, OrderItem, ReturnRequest
-from .pricing import calculate_coupon_discount, calculate_gst, calculate_loyalty_points, mark_coupon_used, shipping_amount, unmark_coupon_used
+from .pricing import calculate_coupon_discount, calculate_gst, calculate_loyalty_points, finishing_line_fee, mark_coupon_used, quote_cart_totals, shipping_amount, unmark_coupon_used
 
 
 def generate_order_number() -> str:
@@ -53,7 +54,15 @@ def _validate_checkout_address(address: Address) -> None:
 
 
 @transaction.atomic
-def create_order_from_cart(user, address_id: int, coupon_code: str = "", loyalty_points_to_use: int = 0, payment_method: str = Order.PaymentMethod.COD) -> Order:
+def create_order_from_cart(
+    user,
+    address_id: int,
+    coupon_code: str = "",
+    loyalty_points_to_use: int = 0,
+    payment_method: str = Order.PaymentMethod.COD,
+    occasion_note: str = "",
+    finishing: list | None = None,
+) -> Order:
     cart = Cart.objects.select_for_update().prefetch_related("items__variant", "items__product").get(user=user)
     items = list(cart.items.select_related("product", "variant"))
     if not items:
@@ -76,14 +85,24 @@ def create_order_from_cart(user, address_id: int, coupon_code: str = "", loyalty
         if not variant or variant.available_qty < item.quantity:
             raise ValueError(f"Insufficient stock for {item.product.name}")
 
-    subtotal = sum(item.variant.price * item.quantity for item in items)
-    coupon_discount = calculate_coupon_discount(subtotal, coupon_code or cart.coupon_code)
-    loyalty_discount = Decimal(min(loyalty_points_to_use or 0, user.loyalty_points, int(subtotal - coupon_discount)))
-    taxable = subtotal - coupon_discount - loyalty_discount
-    cgst, sgst = calculate_gst(taxable)
-    shipping = shipping_amount(taxable)
-    total = taxable + cgst + sgst + shipping
-    points_earned = calculate_loyalty_points(total)
+    # Shared with the /api/cart/quote endpoint so the checkout figure the customer
+    # approves is computed by exactly this code and cannot drift from what we charge.
+    quote = quote_cart_totals(
+        items=items,
+        finishing=finishing,
+        coupon_code=coupon_code or cart.coupon_code,
+        loyalty_points_to_use=loyalty_points_to_use,
+        available_loyalty_points=user.loyalty_points,
+    )
+    finishing_total = quote["finishing_total"]
+    item_finishing = quote["item_finishing"]
+    subtotal = quote["subtotal"]
+    coupon_discount = quote["coupon_discount"]
+    loyalty_discount = quote["loyalty_discount"]
+    cgst, sgst = quote["cgst"], quote["sgst"]
+    shipping = quote["shipping"]
+    total = quote["total"]
+    points_earned = quote["loyalty_points_earned"]
     status = Order.Status.CONFIRMED if payment_method == Order.PaymentMethod.COD else Order.Status.PAYMENT_PENDING
 
     order = Order.objects.create(
@@ -102,6 +121,8 @@ def create_order_from_cart(user, address_id: int, coupon_code: str = "", loyalty
         shipping_address_snapshot=address_snapshot(address),
         loyalty_points_earned=points_earned,
         loyalty_points_used=int(loyalty_discount),
+        finishing_amount=finishing_total,
+        occasion_note=(occasion_note or "")[:200],
         confirmed_at=timezone.now() if status == Order.Status.CONFIRMED else None,
     )
 
@@ -118,6 +139,9 @@ def create_order_from_cart(user, address_id: int, coupon_code: str = "", loyalty
             quantity=item.quantity,
             subtotal=variant.price * item.quantity,
             selected_colour=variant.color_name,
+            blouse_stitching=item_finishing[item.id]["blouse_stitching"],
+            blouse_size=item_finishing[item.id]["blouse_size"],
+            fall_pico=item_finishing[item.id]["fall_pico"],
         )
         if payment_method == Order.PaymentMethod.COD:
             variant.mark_sold(item.quantity)
@@ -228,14 +252,30 @@ def _release_order_reservations(order: Order, *, actor=None) -> bool:
     return True
 
 
+def _restock_variant(variant, product, quantity: int) -> None:
+    """Return `quantity` units to stock without a read-modify-write race.
+
+    Callers hold a lock on the Order row but not on the variant, while
+    create_order_from_cart decrements the same rows under select_for_update.
+    Reading stock_qty into Python and writing it back would silently drop a
+    concurrent purchase's decrement (inflating stock, then overselling), so let
+    the database do the arithmetic and re-read for the realtime publish.
+    """
+    ProductVariant.objects.filter(pk=variant.pk).update(
+        stock_qty=F("stock_qty") + quantity, updated_at=timezone.now()
+    )
+    Product.objects.filter(pk=product.pk).update(
+        total_sold=Greatest(F("total_sold") - quantity, Value(0)), updated_at=timezone.now()
+    )
+    variant.refresh_from_db(fields=["stock_qty"])
+    product.refresh_from_db(fields=["total_sold"])
+
+
 def _restock_order_items(order: Order, *, actor=None) -> None:
     for item in order.items.select_related("product", "variant", "variant__product"):
         variant = item.variant
         product = item.product
-        variant.stock_qty += item.quantity
-        variant.save(update_fields=["stock_qty", "updated_at"])
-        product.total_sold = max(0, product.total_sold - item.quantity)
-        product.save(update_fields=["total_sold", "updated_at"])
+        _restock_variant(variant, product, item.quantity)
         StockLedger.objects.create(
             variant=variant,
             quantity_delta=item.quantity,
@@ -415,10 +455,7 @@ def _restock_return_items_once(order: Order, *, actor=None) -> bool:
     for item in order.items.select_related("product", "variant", "variant__product"):
         variant = item.variant
         product = item.product
-        variant.stock_qty += item.quantity
-        variant.save(update_fields=["stock_qty", "updated_at"])
-        product.total_sold = max(0, product.total_sold - item.quantity)
-        product.save(update_fields=["total_sold", "updated_at"])
+        _restock_variant(variant, product, item.quantity)
         StockLedger.objects.create(
             variant=variant,
             quantity_delta=item.quantity,

@@ -286,3 +286,18 @@ textarea {
     width: 100%;
   }
 }
+
+/* Screen-reader-only text. Used where a visual treatment carries meaning that
+   would otherwise be lost — e.g. a struck-through MRP next to a sale price,
+   which reads as two bare numbers without it. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

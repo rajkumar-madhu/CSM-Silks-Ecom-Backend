@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections import Counter
 from datetime import timedelta
 from math import ceil
 
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import UploadedFile
-from django.db.models import Max, Min
+from django.db.models import Count, Max, Min
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -13,7 +14,7 @@ from accounts.permissions import IsStaffAdmin
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Category, Collection, Product, ProductImage, ProductVariant
+from .models import Category, Collection, Product, ProductImage, ProductVariant, StockAlert
 from .realtime import (
     publish_category_update,
     publish_collection_update,
@@ -82,18 +83,36 @@ class CatalogFacetsView(APIView):
         colors = (
             variants.exclude(color_name="")
             .values("color_name", "color_hex")
+            .annotate(count=Count("product_id", distinct=True))
             .order_by("color_name")
-            .distinct()
         )
-        fabrics = variants.exclude(fabric="").values_list("fabric", flat=True).order_by("fabric").distinct()
-        occasions = sorted({occasion for product in products for occasion in (product.occasions or [])})
+        fabric_counts = (
+            variants.exclude(fabric="")
+            .values("fabric")
+            .annotate(count=Count("product_id", distinct=True))
+            .order_by("fabric")
+        )
+        occasion_counter = Counter(
+            occasion for product in products for occasion in (product.occasions or [])
+        )
+        category_counts = {
+            row["category__slug"]: row["count"]
+            for row in products.order_by().values("category__slug").annotate(count=Count("id", distinct=True))
+            if row["category__slug"]
+        }
         return Response(
             {
                 "categories": CategorySerializer(Category.objects.filter(is_active=True), many=True).data,
                 "colors": list(colors),
-                "fabrics": list(fabrics),
-                "occasions": occasions,
+                "fabrics": [row["fabric"] for row in fabric_counts],
+                "occasions": sorted(occasion_counter),
                 "price": price_bounds,
+                "total": products.distinct().count(),
+                "category_counts": category_counts,
+                "fabric_counts": [{"name": row["fabric"], "count": row["count"]} for row in fabric_counts],
+                "occasion_counts": [
+                    {"name": name, "count": occasion_counter[name]} for name in sorted(occasion_counter)
+                ],
                 "sorts": [
                     {"key": "popularity", "label": "Popularity"},
                     {"key": "price_asc", "label": "Price: Low to High"},
@@ -128,6 +147,50 @@ class ProductDeliveryCheckView(APIView):
                 "seller_name": product.seller_name,
                 "assured": product.assured,
             }
+        )
+
+
+class StockAlertView(APIView):
+    throttle_scope = "otp"
+
+    def post(self, request, slug: str):
+        product = get_object_or_404(product_base_queryset().filter(is_active=True), slug=slug)
+        phone = "".join(ch for ch in str(request.data.get("phone") or "") if ch.isdigit() or ch == "+")
+        if phone and not phone.startswith("+") and len(phone) == 10:
+            phone = f"+91{phone}"
+        email = str(request.data.get("email") or "").strip()
+        raw_variant_id = request.data.get("variant_id")
+        variant = product.default_variant
+        if raw_variant_id not in (None, ""):
+            # filter(id=<non-numeric>) raises ValueError, which escapes this public endpoint
+            # as a 500 because no DRF EXCEPTION_HANDLER is configured.
+            try:
+                variant_id = int(raw_variant_id)
+            except (TypeError, ValueError):
+                return Response({"detail": "Choose a size or colour to watch."}, status=status.HTTP_400_BAD_REQUEST)
+            variant = product.variants.filter(id=variant_id).first()
+        if not variant:
+            return Response({"detail": "Choose a size or colour to watch."}, status=status.HTTP_400_BAD_REQUEST)
+        if variant.available_qty > 0:
+            return Response({"detail": "This weave is in stock — add it to cart."}, status=status.HTTP_400_BAD_REQUEST)
+        # StockAlert.phone is max_length=15, so an over-long value would be a 500 on Postgres
+        # (SQLite silently truncates, which is why dev and CI never saw it).
+        digits = phone.replace("+", "")
+        if len(digits) < 10 or len(phone) > 15:
+            return Response({"detail": "Enter a valid mobile number."}, status=status.HTTP_400_BAD_REQUEST)
+        alert, created = StockAlert.objects.update_or_create(
+            variant=variant,
+            phone=phone,
+            defaults={"email": email, "notified_at": None},
+        )
+        return Response(
+            {
+                "ok": True,
+                "created": created,
+                "message": "We will WhatsApp/SMS you when this weave is back.",
+                "sku": variant.sku,
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
 

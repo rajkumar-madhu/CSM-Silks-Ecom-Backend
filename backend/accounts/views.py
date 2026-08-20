@@ -116,6 +116,9 @@ class SendOTPView(APIView):
                 delivery_failures.append({"channel": "email", "provider": "resend", "error": str(exc)})
                 logger.warning("OTP email delivery failed for %s via Resend: %s", mask_email(email_to), exc)
 
+        # Never expose the OTP outside local development. DEBUG is required in addition to the
+        # opt-in flag: settings only forces OTP_DEV_FALLBACK_ENABLED=False when IS_PRODUCTION, so
+        # without this guard any non-production non-DEBUG env (staging) would leak login codes.
         if not response["delivery_channels"] and settings.DEBUG and settings.OTP_DEV_FALLBACK_ENABLED:
             response["dev_otp"] = otp
             response["delivery_channels"].append("development")

@@ -20,6 +20,8 @@ import type {
   ProductVariant,
   ReturnRequest,
   User,
+  CartQuote,
+  CartQuoteRequest,
 } from '@/types';
 
 const API_BASE = '/api';
@@ -305,6 +307,11 @@ export const api = {
     collections: () => request<CatalogCollection[]>('/collections'),
     delivery: (slug: string, pin_code: string) =>
       request<DeliveryCheck>(`/products/${slug}/delivery?pin_code=${encodeURIComponent(pin_code)}`),
+    stockAlert: (slug: string, data: { phone: string; email?: string; variant_id?: number }) =>
+      request<{ ok: boolean; created: boolean; message: string; sku: string }>(`/products/${slug}/stock-alert`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     reviews: {
       list: (slug: string) => request<ProductReview[]>(`/products/${slug}/reviews`),
       create: (slug: string, data: { rating: number; title: string; body: string }) =>
@@ -398,6 +405,13 @@ export const api = {
         body: JSON.stringify({ coupon_code }),
       }),
     summary: () => request<CartResponse>('/checkout/summary'),
+    // Authoritative checkout totals. Do not recompute GST/shipping/coupon in the SPA —
+    // the server prices finishing into the coupon base and the two drift otherwise.
+    quote: (payload: CartQuoteRequest) =>
+      request<CartQuote>('/cart/quote', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
   },
 
   orders: {
@@ -408,7 +422,19 @@ export const api = {
     get: (orderId: string | number) => request<Order>(`/orders/${orderId}`),
     track: (identifier: string, phone: string) =>
       request<Order>(`/orders/track?identifier=${encodeURIComponent(identifier)}&phone=${encodeURIComponent(phone)}`),
-    create: (data: { address_id: number; coupon_code?: string; loyalty_points_to_use?: number; payment_method?: 'cod' | 'razorpay' }) =>
+    create: (data: {
+      address_id: number;
+      coupon_code?: string;
+      loyalty_points_to_use?: number;
+      payment_method?: 'cod' | 'razorpay';
+      occasion_note?: string;
+      finishing?: Array<{
+        cart_item_id: number;
+        blouse_stitching?: boolean;
+        blouse_size?: string;
+        fall_pico?: boolean;
+      }>;
+    }) =>
       request<Order>('/orders', {
         method: 'POST',
         body: JSON.stringify(data),

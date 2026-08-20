@@ -1,6 +1,8 @@
 import json
+import tempfile
+from pathlib import Path
 
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIClient
 
 
@@ -63,3 +65,17 @@ class ReadinessEndpointTests(TestCase):
         self.assertFalse(checks["otp"]["ok"])
         self.assertFalse(checks["notifications"]["ok"])
         self.assertFalse(checks["shipping"]["ok"])
+
+
+class MediaServingTests(SimpleTestCase):
+    def test_media_is_served_when_debug_is_false(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            media_root = Path(tmp)
+            payload = b"silk-media-ok"
+            (media_root / "probe.txt").write_bytes(payload)
+
+            with override_settings(DEBUG=False, SECURE_SSL_REDIRECT=False, MEDIA_ROOT=media_root):
+                response = APIClient().get("/media/probe.txt")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(b"".join(response.streaming_content), payload)

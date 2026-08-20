@@ -35,7 +35,6 @@ type OTPDeliveryState = {
 
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 30;
-const AUTH_IMAGE_URL = '/placeholder-product.svg';
 
 function cleanPhone(value: string) {
   const raw = value.trim();
@@ -91,10 +90,10 @@ export function CustomerAuth({ initialMode = 'login' }: CustomerAuthProps) {
 
   const isSignup = mode === 'signup';
   const normalizedPhone = cleanPhone(phone);
-  const headline = isSignup ? 'Create your CSM Silks account' : 'Login to your CSM Silks account';
+  const headline = isSignup ? 'Join the CSM Silks house' : 'Welcome back to the house';
   const subcopy = isSignup
-    ? 'Save your profile, sync wishlist, earn loyalty points, and checkout faster with OTP-secured access.'
-    : 'Use your phone number with SMS or email OTP backup to continue shopping, tracking, returns, rewards, and invoices securely.';
+    ? 'A private account for Kanchipuram silks — save the weave you love, earn points after delivery, and checkout with a quieter step.'
+    : 'Sign in with your phone. OTP by SMS or email keeps wishlist, tracking, returns, and invoices on this browser.';
   const phoneStepCopy = isSignup
     ? 'We will send a one-time password to verify your phone and email.'
     : otpDevFallbackEnabled
@@ -299,27 +298,27 @@ export function CustomerAuth({ initialMode = 'login' }: CustomerAuthProps) {
       <div className="auth-shell">
         <section className="auth-story" aria-label="CSM Silks customer account benefits">
           <div className="auth-back auth-brand-chip">
-            <ShieldCheck size={17} />
-            Secure customer access
+            <Sparkles size={17} />
+            Kanchipuram · since 1987
           </div>
           <div className="auth-story-copy">
             <h1>{headline}</h1>
             <p>{subcopy}</p>
           </div>
-          <div className="auth-visual">
-            <img src={AUTH_IMAGE_URL} alt="CSM Silks woven silk collection" />
+          <div className="auth-visual auth-visual-weave" role="img" aria-label="Woven zari silk field">
+            <div className="auth-weave" aria-hidden="true" />
             <div className="auth-visual-panel">
               <div>
-                <span>Account benefits</span>
-                <strong>Wishlist, rewards, invoices, returns and shipment updates in one place.</strong>
+                <span>House privileges</span>
+                <strong>Wishlist, loyalty after delivery, invoices, and live shipment notes — one account.</strong>
               </div>
               <ShoppingBag size={24} />
             </div>
           </div>
           <div className="auth-benefits">
-            <div><ShieldCheck size={18} /><span>OTP verified phone login</span></div>
-            <div><Sparkles size={18} /><span>Loyalty points after delivery</span></div>
-            <div><MessageCircle size={18} /><span>Google or email/SMS OTP sign-in</span></div>
+            <div><ShieldCheck size={18} /><span>OTP on phone, with email backup</span></div>
+            <div><Sparkles size={18} /><span>Points land after the saree is delivered</span></div>
+            <div><MessageCircle size={18} /><span>Google sign-in when the house enables it</span></div>
           </div>
         </section>
 
@@ -336,7 +335,7 @@ export function CustomerAuth({ initialMode = 'login' }: CustomerAuthProps) {
           </div>
 
           <div className="auth-card-head">
-            <h2>{step === 'phone' ? (isSignup ? 'Start with your details' : 'Enter mobile number') : 'Verify OTP'}</h2>
+            <h2>{step === 'phone' ? (isSignup ? 'Tell us who you are' : 'Your mobile number') : 'Enter the six-digit weave'}</h2>
             <p>
               {step === 'phone'
                 ? phoneStepCopy

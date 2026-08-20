@@ -137,3 +137,83 @@ class PaymentRefundApiTests(TestCase):
         self.assertEqual(order.status, Order.Status.DELIVERED)
         self.assertEqual(RazorpayWebhookEvent.objects.get(event_id="evt_refund_processed_1").processed_at is not None, True)
         self.assertEqual(ShipmentEvent.objects.filter(order=order, status=ShipmentEvent.Status.REFUNDED, description__icontains="Partial refund").count(), 1)
+
+
+@override_settings(DEBUG=True, PAYMENT_DEV_FALLBACK_ENABLED=True, RAZORPAY_KEY_ID="", RAZORPAY_KEY_SECRET="", RAZORPAY_WEBHOOK_SECRET="")
+class PaymentLookupRegressionTests(TestCase):
+    """Unknown ids used to raise DoesNotExist straight out of the view as a 500."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="+919900000501", email="lookup1@example.com", phone="+919900000501", password="customer123", is_verified=True)
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_razorpay_order_for_unknown_order_id_returns_404(self):
+        resp = self.client.post("/api/payments/razorpay/order", {"order_id": 999999}, format="json")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_razorpay_order_for_another_users_order_returns_404(self):
+        other = User.objects.create_user(username="+919900000502", email="lookup2@example.com", phone="+919900000502", password="customer123")
+        order = Order.objects.create(
+            order_number="CSM-OTHER-1", user=other, subtotal=Decimal("100.00"),
+            total_amount=Decimal("100.00"), status=Order.Status.PAYMENT_PENDING,
+            payment_method=Order.PaymentMethod.RAZORPAY,
+        )
+        resp = self.client.post("/api/payments/razorpay/order", {"order_id": order.id}, format="json")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_verify_with_unknown_razorpay_order_id_returns_404(self):
+        resp = self.client.post(
+            "/api/payments/razorpay/verify",
+            {"razorpay_order_id": "order_nope", "razorpay_payment_id": "pay_x", "razorpay_signature": "dev"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 404)
+
+
+@override_settings(DEBUG=True, PAYMENT_DEV_FALLBACK_ENABLED=True, RAZORPAY_KEY_ID="", RAZORPAY_KEY_SECRET="", RAZORPAY_WEBHOOK_SECRET="")
+class RefundAmountGuardTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(username="+919900000601", email="guard1@example.com", phone="+919900000601", password="customer123", is_verified=True)
+        self.admin = User.objects.create_user(username="guard-admin", email="guard-admin@example.com", password="admin123", is_staff=True)
+        self.client.force_authenticate(self.admin)
+        self.order = Order.objects.create(
+            order_number="CSM-GUARD-1", user=self.user, subtotal=Decimal("100.00"),
+            total_amount=Decimal("100.00"), status=Order.Status.DELIVERED,
+            payment_method=Order.PaymentMethod.COD,
+        )
+        self.payment = Payment.objects.create(
+            order=self.order, amount=Decimal("100.00"), method=Payment.Method.COD,
+            status=Payment.Status.CAPTURED, paid_at=timezone.now(),
+        )
+
+    def test_zero_amount_is_rejected_not_treated_as_full_refund(self):
+        resp = self.client.post("/api/payments/refund", {"order_id": self.order.id, "amount": "0.00"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.refunded_amount, Decimal("0.00"))
+        self.assertEqual(self.payment.status, Payment.Status.CAPTURED)
+
+    def test_negative_amount_is_rejected(self):
+        resp = self.client.post("/api/payments/refund", {"order_id": self.order.id, "amount": "-10.00"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.refunded_amount, Decimal("0.00"))
+
+    def test_over_refund_is_rejected_before_any_state_change(self):
+        resp = self.client.post("/api/payments/refund", {"order_id": self.order.id, "amount": "150.00"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.refunded_amount, Decimal("0.00"))
+
+    def test_omitted_amount_still_refunds_remaining_balance(self):
+        resp = self.client.post("/api/payments/refund", {"order_id": self.order.id}, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.refunded_amount, Decimal("100.00"))
+        self.assertEqual(self.payment.status, Payment.Status.REFUNDED)
+
+    def test_refund_for_unknown_order_returns_404(self):
+        resp = self.client.post("/api/payments/refund", {"order_id": 987654}, format="json")
+        self.assertEqual(resp.status_code, 404)

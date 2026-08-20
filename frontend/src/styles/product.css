@@ -9,6 +9,59 @@
   margin: 0 auto;
 }
 
+.pg--retail {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 18px 14px;
+  max-width: 1280px;
+}
+
+.pg--retail .product-card--retail {
+  background: transparent;
+}
+
+.pg--retail .product-card-media {
+  background: #f3f3f3;
+}
+
+.product-visual.has-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.product-card--retail .product-visual,
+.product-card--retail .product-visual.has-photo {
+  min-height: 0;
+  border-radius: 0;
+}
+
+.product-card--retail .product-visual-label,
+.product-card--retail .product-visual-weave,
+.product-card--retail .product-visual-fold {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .pg--retail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 10px;
+  }
+
+  .product-card--retail .product-quick-shop {
+    opacity: 1;
+    transform: none;
+    position: static;
+    margin: 8px 0 0;
+    width: 100%;
+  }
+
+  .product-card--retail .product-card-media {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
 /* Storefront Product Cards */
 .product-card {
   position: relative;
@@ -46,6 +99,133 @@
   transform: translateY(-4px);
   border-color: var(--gold-2);
   box-shadow: var(--shadow-lg);
+}
+
+.product-card--retail {
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
+  min-width: 0;
+}
+
+.product-card--retail:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.product-card--retail .product-card-media {
+  padding: 0;
+  background: #f6f6f6;
+  border-bottom: 0;
+  aspect-ratio: 3 / 4;
+}
+
+.product-card--retail .product-card-hover-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.product-card--retail:hover .product-card-hover-photo {
+  opacity: 1;
+}
+
+.product-card--retail .product-fast {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: #111;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.product-card--retail .product-quick-shop {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 3;
+  min-height: 40px;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: var(--transition);
+}
+
+.product-card--retail:hover .product-quick-shop {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.product-card--retail .product-wish {
+  top: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.product-card--retail .product-card-body {
+  padding: 12px 2px 0;
+}
+
+.product-card--retail .product-card-price-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.product-card--retail .product-card-price-line strong {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+/* Discount share of the price line — kept inline beside the struck MRP so the
+   three values read as one unit (now Rs X / was Rs Y / -Z%). */
+.product-card--retail .product-price-off {
+  color: var(--sale, #9a2b2b);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.product-card--retail .product-mrp-inline {
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: line-through;
+}
+
+.product-card--retail h3 {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+/* Retail cards show colour as swatches (see ProductCard), not as text — the old
+   .product-color-names rule is gone with the placeholder "Color 1/2/3" markup. */
+.product-card--retail .product-card-swatches {
+  margin-top: 10px;
 }
 
 .product-card-media {
@@ -378,22 +558,26 @@
 }
 
 .pd-main-img {
-  padding: 16px;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: var(--surface);
+  background: #f3f1ed;
   box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
 .detail-visual {
   min-height: 520px;
-  border-radius: var(--radius);
+  border-radius: 0;
   overflow: hidden;
 }
 
 .detail-visual.has-photo img {
-  object-fit: contain;
-  background: #fbf9f4;
+  object-fit: cover;
+  object-position: center top;
+  background: #f3f1ed;
+  width: 100%;
+  height: 100%;
 }
 
 .pd-thumbs {
@@ -1642,5 +1826,234 @@
 [data-theme="dark"] .pd-desktop-cta,
 [data-theme="dark"] .pd-sticky-bar {
   background: rgba(30, 24, 20, 0.94);
+}
+
+.catalog-swatches {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.catalog-swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.catalog-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(26, 18, 8, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+}
+
+.catalog-swatch.on {
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.pd-spin {
+  position: relative;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+  outline: none;
+}
+
+.pd-spin.dragging {
+  cursor: grabbing;
+}
+
+.pd-spin-stage {
+  position: relative;
+  min-height: 520px;
+  perspective: 1400px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(196, 146, 58, 0.16), transparent 46%),
+    linear-gradient(180deg, #f7f3ec 0%, #ebe4d8 100%);
+}
+
+.pd-spin-orbit {
+  position: absolute;
+  inset: 7% 8%;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.pd-spin-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 22px 48px rgba(26, 18, 8, 0.28);
+}
+
+.pd-spin-face .detail-visual {
+  min-height: 100%;
+  height: 100%;
+}
+
+.pd-spin-back {
+  transform: rotateY(180deg) scaleX(-1);
+}
+
+.pd-spin-edge {
+  position: absolute;
+  inset: 0 auto 0 50%;
+  width: 10px;
+  margin-left: -5px;
+  background: linear-gradient(90deg, #8a6a2a, #e8c878, #8a6a2a);
+  transform: rotateY(90deg) translateZ(5px);
+  transform-style: preserve-3d;
+}
+
+.pd-spin-plinth {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 18px;
+  height: 18px;
+  border-radius: 100%;
+  background: radial-gradient(ellipse at center, rgba(26, 18, 8, 0.22), transparent 70%);
+  pointer-events: none;
+}
+
+.pd-spin-badge,
+.pd-spin-hint,
+.pd-spin-fs {
+  position: absolute;
+  z-index: 2;
+}
+
+.pd-spin-badge {
+  top: 14px;
+  left: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 13, 11, 0.78);
+  color: #f4e6c4;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.pd-spin-hint {
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 252, 246, 0.92);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+}
+
+.pd-spin-fs {
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid rgba(26, 18, 8, 0.12);
+  background: rgba(255, 252, 246, 0.92);
+  color: var(--ink);
+}
+
+.pd-spin-dots {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  z-index: 2;
+}
+
+.pd-spin-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(26, 18, 8, 0.22);
+}
+
+.pd-spin-dots i.on {
+  background: var(--gold);
+}
+
+.pd-spin.is-fs,
+.pd-spin:fullscreen {
+  background: #0f0d0b;
+}
+
+.pd-spin.is-fs .pd-spin-stage,
+.pd-spin:fullscreen .pd-spin-stage {
+  min-height: 100vh;
+}
+
+.pd-wa-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--green-2, #0a5243);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pd-notify {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px dashed var(--gold);
+  border-radius: var(--radius);
+  background: rgba(196, 146, 58, 0.06);
+}
+
+.pd-notify p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.pd-notify-row {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr auto;
+  gap: 8px;
+}
+
+.pd-notify small {
+  display: block;
+  margin-top: 8px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+@media (max-width: 860px) {
+  .pd-spin-stage {
+    min-height: 360px;
+  }
+}
+
+@media (max-width: 520px) {
+  .pd-notify-row {
+    grid-template-columns: 1fr;
+  }
 }
 

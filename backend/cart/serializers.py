@@ -210,3 +210,16 @@ class WishlistItemSerializer(serializers.ModelSerializer):
 
 class WishlistWriteSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
+
+
+class CartQuoteFinishingSerializer(serializers.Serializer):
+    cart_item_id = serializers.IntegerField()
+    blouse_stitching = serializers.BooleanField(required=False, default=False)
+    blouse_size = serializers.CharField(required=False, allow_blank=True, default="")
+    fall_pico = serializers.BooleanField(required=False, default=False)
+
+
+class CartQuoteSerializer(serializers.Serializer):
+    finishing = CartQuoteFinishingSerializer(many=True, required=False)
+    coupon_code = serializers.CharField(required=False, allow_blank=True)
+    loyalty_points_to_use = serializers.IntegerField(required=False, min_value=0)

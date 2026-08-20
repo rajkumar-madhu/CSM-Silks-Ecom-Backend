@@ -13,6 +13,8 @@ psycopg2-binary==2.9.10
 
 # Integrations
 anthropic==0.42.0
+replicate==0.30.0
+Pillow==11.1.0
 razorpay==1.4.2
 celery==5.4.0
 redis==5.2.1
@@ -24,3 +26,4 @@ python-dotenv==1.0.1
 python-dateutil==2.9.0
 google-auth==2.40.3
 sentry-sdk[django,celery,redis]==2.30.0
+whitenoise==6.8.2
