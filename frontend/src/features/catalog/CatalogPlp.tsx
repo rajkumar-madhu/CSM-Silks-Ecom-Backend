@@ -11,6 +11,7 @@ import { FilterSidebar } from './components/FilterSidebar';
 import { FALLBACK_SORTS, PlpSortBar } from './components/PlpSortBar';
 import { PlpBanners, type PlpBannerSlide, type PlpCategoryTile } from './components/PlpBanners';
 import {
+  ATTRIBUTE_KEYS,
   buildProductQuery,
   clearedPlpState,
   parsePlpParams,
@@ -29,10 +30,22 @@ const PER_PAGE = 24;
 
 export function CatalogPlp({ gender, title, slides, tiles }: CatalogPlpProps) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const state = useMemo(() => parsePlpParams(searchParams), [searchParams]);
-
   const [products, setProducts] = useState<Product[]>([]);
   const [facets, setFacets] = useState<CatalogFacets | null>(null);
+  // ATTRIBUTE_KEYS unioned with whatever groups the live facets response declares — a positive
+  // allowlist, not "every URL param that isn't a known non-attribute field" (that was tried and
+  // let utm_source/gclid/page-style URL noise become phantom filter chips; see plpFilters.ts).
+  // Before facets load, only ATTRIBUTE_KEYS is known; once they load, a backend-added group
+  // (e.g. `pattern`) becomes recognized and the URL re-parses to pick it up.
+  const knownAttributeKeys = useMemo(
+    () => new Set<string>([...ATTRIBUTE_KEYS, ...(facets?.attributes || []).map(group => group.key)]),
+    [facets],
+  );
+  const state = useMemo(
+    () => parsePlpParams(searchParams, knownAttributeKeys),
+    [searchParams, knownAttributeKeys],
+  );
+
   const [total, setTotal] = useState<number | null>(null);
   const [pages, setPages] = useState(1);
   const [page, setPage] = useState(1);

@@ -2,19 +2,14 @@
 // single source of truth: parse/serialize must round-trip so links are shareable and
 // back/forward navigation restores the exact view.
 
-// Must match ATTRIBUTE_PARAMS in backend/catalog/selectors.py. Kept for the legacy `?fabrics=`
-// alias and anywhere a known-key list is genuinely required (it is NOT used to gate which URL
-// params are treated as attribute groups any more — see RESERVED_PARAM_KEYS below).
+// Must match ATTRIBUTE_PARAMS in backend/catalog/selectors.py. This is the *default* set of
+// URL params `parsePlpParams` treats as attribute groups — a positive allowlist, not a blocklist
+// of "everything else". A caller with live facets (see CatalogPlp.tsx) passes ATTRIBUTE_KEYS
+// unioned with `facets.attributes[].key` so a backend-added group round-trips the moment the
+// server declares it, without ever treating arbitrary URL noise (utm_source, gclid, page, ...) as
+// a filter — that was tried as a blocklist and regressed (see plpFilters.test.ts).
 export const ATTRIBUTE_KEYS = ['fabric', 'weave', 'zari', 'border', 'pallu', 'work', 'origin'] as const;
 export type AttributeKey = (typeof ATTRIBUTE_KEYS)[number];
-
-// Every non-attribute query param this module reads. Any URL param NOT in this set is treated
-// as an attribute-shaped group (e.g. `?pattern=ikat`), so a new attribute group the backend adds
-// (see `_attribute_groups` in backend/catalog/views.py) round-trips through the URL without a
-// frontend deploy. `fabrics` is the pre-vocabulary alias for `fabric`, folded in separately below.
-const RESERVED_PARAM_KEYS = new Set([
-  'category', 'sort', 'rating', 'min_price', 'max_price', 'discount', 'colors', 'occasions', 'instock', 'fabrics',
-]);
 
 export interface PlpFilterState {
   category: string;
@@ -55,11 +50,13 @@ function cleanList(value: string | null): string[] {
   return [...new Set(value.split(',').map(item => item.trim()).filter(Boolean))];
 }
 
-export function parsePlpParams(params: URLSearchParams): PlpFilterState {
+export function parsePlpParams(
+  params: URLSearchParams,
+  knownAttributeKeys: Iterable<string> = ATTRIBUTE_KEYS,
+): PlpFilterState {
   const sort = params.get('sort') || '';
   const attributes: Record<string, string[]> = {};
-  for (const key of new Set(params.keys())) {
-    if (RESERVED_PARAM_KEYS.has(key)) continue;
+  for (const key of new Set(knownAttributeKeys)) {
     const values = cleanList(params.get(key));
     if (values.length) attributes[key] = values;
   }

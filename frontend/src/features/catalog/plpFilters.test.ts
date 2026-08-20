@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ATTRIBUTE_KEYS,
   DEFAULT_PLP_STATE,
   activePlpChips,
   buildProductQuery,
@@ -133,20 +134,41 @@ describe('attribute filters', () => {
     expect(plpStateToParams(parsed).get('fabrics')).toBeNull();
   });
 
-  it('accepts an attribute key outside ATTRIBUTE_KEYS and round-trips it', () => {
-    // Simulates the backend adding an 8th attribute group (e.g. `pattern`) that the frontend
-    // has not been told about by name — it must still filter, not silently no-op (C1).
-    const parsed = parsePlpParams(new URLSearchParams('pattern=ikat'));
+  it('accepts an attribute key outside ATTRIBUTE_KEYS when the caller declares it known, and round-trips it', () => {
+    // Simulates the backend adding an 8th attribute group (e.g. `pattern`) that facets has just
+    // declared (CatalogPlp.tsx unions ATTRIBUTE_KEYS with the live facets.attributes[].key list
+    // and passes that as `knownAttributeKeys`) — it must still filter, not silently no-op (C1).
+    const knownAttributeKeys = [...ATTRIBUTE_KEYS, 'pattern'];
+    const parsed = parsePlpParams(new URLSearchParams('pattern=ikat'), knownAttributeKeys);
     expect(parsed.attributes).toEqual({ pattern: ['ikat'] });
     const params = plpStateToParams(parsed);
     expect(params.get('pattern')).toBe('ikat');
-    expect(parsePlpParams(params).attributes).toEqual(parsed.attributes);
+    expect(parsePlpParams(params, knownAttributeKeys).attributes).toEqual(parsed.attributes);
   });
 
   it('still ignores known non-attribute params for the purposes of attribute parsing', () => {
-    // category/sort/rating/etc. are reserved names, never swept into `attributes`.
+    // category/sort/rating/etc. are never attribute-shaped, known keys or not.
     const parsed = parsePlpParams(new URLSearchParams('category=bridal&sort=newest&rating=4'));
     expect(parsed.attributes).toEqual({});
+  });
+
+  it('treats an undeclared key as inert, not as an attribute group, even if it looks attribute-shaped', () => {
+    // Regression (C1 follow-up): a blocklist approach ("anything not a known non-attribute
+    // field is an attribute") swept arbitrary URL noise into `attributes`, which then rendered
+    // as removable filter chips and got forwarded to the products/facets API. Only
+    // ATTRIBUTE_KEYS (or whatever the caller explicitly passes as `knownAttributeKeys`, e.g.
+    // from live facets) may become an attribute group — everything else stays inert.
+    const parsed = parsePlpParams(new URLSearchParams('pattern=ikat'));
+    expect(parsed.attributes).toEqual({});
+  });
+
+  it('never turns marketing/pagination URL noise into phantom filter chips', () => {
+    // The exact regression the reviewer caught: the PLP is a paid/marketing landing page, so
+    // utm_source/gclid/fbclid-style params and `page` are exactly the noise a real URL carries.
+    // None of it is attribute-shaped, so none of it may become a chip.
+    const parsed = parsePlpParams(new URLSearchParams('utm_source=newsletter&gclid=abc&page=2'));
+    expect(parsed.attributes).toEqual({});
+    expect(activePlpChips(parsed)).toEqual([]);
   });
 
   it('drops empty attribute groups rather than emitting blank params', () => {
