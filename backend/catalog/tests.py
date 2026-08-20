@@ -663,6 +663,13 @@ class SareeFacetAttributeTests(TestCase):
         # inferring "gender=women means saree" — the exact coupling that field's
         # docstring exists to prevent. A women's listing with zero saree-category
         # products (e.g. all kurtis) must not surface Fabric/Zari/etc groups.
+        #
+        # Two DISTINCT fabric values are load-bearing here, not one: with a single
+        # value the fabric group would be dropped by the unrelated <2-options rule
+        # regardless of scoping, so the test would pass even under the old buggy
+        # gender=="women" fallback. Two values make the fabric group clear that
+        # threshold — the only thing standing between "empty" and "leaks a group"
+        # is the category__product_type=SAREE filter this test exists to pin.
         from catalog.models import AttributeOption, Category, Product, ProductVariant
 
         Product.objects.filter(category=self.saree_cat).delete()
@@ -670,11 +677,13 @@ class SareeFacetAttributeTests(TestCase):
             name="Kurtis", slug="kurtis", gender="women", product_type="other"
         )
         kanjivaram = AttributeOption.objects.get(key="fabric", value_slug="kanjivaram-silk")
-        kurti = Product.objects.create(
-            name="Kurti", slug="kurti-1", category=kurti_cat, gender="women",
-            base_price=100, base_mrp=200, fabric=kanjivaram,
-        )
-        ProductVariant.objects.create(product=kurti, sku="SKU-kurti", price=100, mrp=200, stock_qty=3)
+        patola = AttributeOption.objects.get(key="fabric", value_slug="patola-silk")
+        for slug, fabric in [("kurti-1", kanjivaram), ("kurti-2", patola)]:
+            kurti = Product.objects.create(
+                name=slug, slug=slug, category=kurti_cat, gender="women",
+                base_price=100, base_mrp=200, fabric=fabric,
+            )
+            ProductVariant.objects.create(product=kurti, sku=f"SKU-{slug}", price=100, mrp=200, stock_qty=3)
         self.assertEqual(self._groups({"gender": "women"}), {})
 
     def test_parked_and_inactive_options_are_excluded_from_counts(self):
