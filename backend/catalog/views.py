@@ -14,7 +14,7 @@ from accounts.permissions import IsStaffAdmin
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Category, Collection, Product, ProductImage, ProductVariant, StockAlert
+from .models import AttributeOption, Category, Collection, Product, ProductImage, ProductVariant, StockAlert
 from .realtime import (
     publish_category_update,
     publish_collection_update,
@@ -22,7 +22,7 @@ from .realtime import (
     publish_product_deleted,
     publish_product_update,
 )
-from .selectors import product_base_queryset, public_products
+from .selectors import ATTRIBUTE_PARAMS, product_base_queryset, public_products
 from .serializers import (
     AdminCategoryWriteSerializer,
     AdminCollectionWriteSerializer,
@@ -75,6 +75,53 @@ class CollectionListView(APIView):
         return Response(CollectionSerializer(collections, many=True).data)
 
 
+def _is_saree_scope(params) -> bool:
+    """Which attribute panel applies — a property of the catalogue, not the URL."""
+    category = params.get("category")
+    if category:
+        return Category.objects.filter(slug=category, product_type=Category.ProductType.SAREE).exists()
+    return (params.get("gender") or "") == "women"
+
+
+def _attribute_groups(params) -> list[dict]:
+    if not _is_saree_scope(params):
+        return []
+    labels = dict(AttributeOption.Key.choices)
+    groups = []
+    for key in ATTRIBUTE_PARAMS:
+        # Count over the queryset with THIS group's own filter removed, so ticking
+        # one option does not zero out its siblings. Other filters still apply.
+        trimmed = params.copy()
+        trimmed.pop(key, None)
+        rows = (
+            public_products(trimmed)
+            .filter(**{f"{key}__is_filterable": True, f"{key}__is_active": True})
+            .order_by()
+            .values(f"{key}__value_slug", f"{key}__label", f"{key}__sort_order")
+            .annotate(count=Count("id", distinct=True))
+        )
+        options = sorted(
+            (
+                {
+                    "slug": row[f"{key}__value_slug"],
+                    "label": row[f"{key}__label"],
+                    "count": row["count"],
+                    "_sort": row[f"{key}__sort_order"],
+                }
+                for row in rows
+                if row["count"]
+            ),
+            key=lambda option: (option["_sort"], option["label"]),
+        )
+        for option in options:
+            option.pop("_sort")
+        # A single-option group is a checkbox that filters nothing. Hide it.
+        if len(options) < 2:
+            continue
+        groups.append({"key": key, "label": labels[key], "options": options})
+    return groups
+
+
 class CatalogFacetsView(APIView):
     def get(self, request):
         products = public_products(request.query_params)
@@ -114,6 +161,7 @@ class CatalogFacetsView(APIView):
                 "occasion_counts": [
                     {"name": name, "count": occasion_counter[name]} for name in sorted(occasion_counter)
                 ],
+                "attributes": _attribute_groups(request.query_params),
                 "sorts": [
                     {"key": "popularity", "label": "Popularity"},
                     {"key": "price_asc", "label": "Price: Low to High"},

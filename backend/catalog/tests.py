@@ -595,3 +595,71 @@ class SareeAttributeFilterTests(TestCase):
         response = self.client.get("/api/products", {"gender": "women", "zari": "retired-option"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["total"], 0)
+
+
+class SareeFacetAttributeTests(TestCase):
+    def setUp(self):
+        from catalog.models import AttributeOption, Category, Product, ProductVariant
+
+        self.client = APIClient()
+        self.saree_cat = Category.objects.create(
+            name="Kanjivaram", slug="kanjivaram", gender="women", product_type="saree"
+        )
+        self.mens_cat = Category.objects.create(
+            name="Dhoti", slug="mens-dhoti", gender="men", product_type="menswear"
+        )
+        kanjivaram = AttributeOption.objects.get(key="fabric", value_slug="kanjivaram-silk")
+        patola = AttributeOption.objects.get(key="fabric", value_slug="patola-silk")
+        gold = AttributeOption.objects.get(key="zari", value_slug="real-gold-zari")
+
+        for slug, fabric, zari, category, gender in [
+            ("a", kanjivaram, gold, self.saree_cat, "women"),
+            ("b", kanjivaram, gold, self.saree_cat, "women"),
+            ("c", patola, gold, self.saree_cat, "women"),
+            ("d", None, None, self.mens_cat, "men"),
+        ]:
+            product = Product.objects.create(
+                name=slug.upper(), slug=slug, category=category, gender=gender,
+                base_price=100, base_mrp=200, fabric=fabric, zari=zari,
+            )
+            ProductVariant.objects.create(product=product, sku=f"SKU-{slug}", price=100, mrp=200, stock_qty=3)
+
+    def _groups(self, params):
+        data = self.client.get("/api/catalog/facets", params).json()
+        return {group["key"]: group for group in data.get("attributes", [])}
+
+    def test_saree_scope_returns_attribute_groups_with_counts(self):
+        groups = self._groups({"gender": "women"})
+        self.assertIn("fabric", groups)
+        counts = {option["slug"]: option["count"] for option in groups["fabric"]["options"]}
+        self.assertEqual(counts, {"kanjivaram-silk": 2, "patola-silk": 1})
+
+    def test_group_with_fewer_than_two_options_is_omitted(self):
+        # Every saree here has the same zari, so a Zari group would be a single
+        # useless checkbox.
+        groups = self._groups({"gender": "women"})
+        self.assertNotIn("zari", groups)
+
+    def test_counts_exclude_the_groups_own_filter(self):
+        # Ticking one fabric must not zero out the others, or multi-select is unusable.
+        groups = self._groups({"gender": "women", "fabric": "kanjivaram-silk"})
+        counts = {option["slug"]: option["count"] for option in groups["fabric"]["options"]}
+        self.assertEqual(counts, {"kanjivaram-silk": 2, "patola-silk": 1})
+
+    def test_other_groups_still_respect_the_active_filter(self):
+        from catalog.models import AttributeOption, Product
+
+        silver = AttributeOption.objects.get(key="zari", value_slug="silver-zari")
+        Product.objects.filter(slug="c").update(zari=silver)
+        groups = self._groups({"gender": "women", "fabric": "kanjivaram-silk"})
+        counts = {option["slug"]: option["count"] for option in groups.get("zari", {"options": []})["options"]}
+        self.assertNotIn("silver-zari", counts)
+
+    def test_menswear_scope_returns_no_attribute_groups(self):
+        self.assertEqual(self._groups({"gender": "men"}), {})
+
+    def test_legacy_facet_fields_are_unchanged(self):
+        data = self.client.get("/api/catalog/facets", {"gender": "women"}).json()
+        for key in ("categories", "colors", "fabrics", "occasions", "price", "sorts", "total",
+                    "category_counts", "fabric_counts", "occasion_counts"):
+            self.assertIn(key, data)
