@@ -134,6 +134,12 @@ class CatalogFacetsView(APIView):
         )
         fabric_counts = (
             products.exclude(fabric__isnull=True)
+            # Same is_filterable/is_active gate as _attribute_groups below — otherwise a
+            # parked ("needs review") or retired fabric option reappears here, the one
+            # remaining surface (legacy `fabrics`/`fabric_counts`, consumed by the Search
+            # page's CatalogToolbar) that could re-expose the fragmentation this feature
+            # was built to remove (C5).
+            .filter(fabric__is_filterable=True, fabric__is_active=True)
             .order_by()
             .values("fabric__label")
             .annotate(count=Count("id", distinct=True))

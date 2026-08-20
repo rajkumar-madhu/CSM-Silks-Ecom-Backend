@@ -372,6 +372,37 @@ class CatalogFacetCountTests(TestCase):
         self.assertEqual(data["total"], 1)
         self.assertEqual(data["category_counts"], {"bridal": 1})
 
+    def test_legacy_fabric_fields_hide_parked_and_retired_options(self):
+        # C5: fabrics/fabric_counts are the legacy fields CatalogToolbar/pages/Search.tsx still
+        # read. They must apply the same is_filterable/is_active gate as _attribute_groups, or a
+        # parked ("needs review") or retired fabric option re-exposes the exact fragmentation
+        # this feature exists to remove.
+        parked = AttributeOption.objects.create(
+            key="fabric", value_slug="parked-silk-test", label="Parked silk", is_filterable=False
+        )
+        retired = AttributeOption.objects.create(
+            key="fabric", value_slug="retired-silk-test", label="Retired silk", is_active=False
+        )
+        Product.objects.create(
+            name="Parked Fabric Product", slug="parked-fabric-product", category=self.sarees, gender="women",
+            fabric=parked, base_price=100, base_mrp=200, is_active=True,
+        )
+        Product.objects.create(
+            name="Retired Fabric Product", slug="retired-fabric-product", category=self.sarees, gender="women",
+            fabric=retired, base_price=100, base_mrp=200, is_active=True,
+        )
+
+        data = self.client.get("/api/catalog/facets", {"gender": "women"}).json()
+
+        self.assertNotIn("Parked silk", data["fabrics"])
+        self.assertNotIn("Retired silk", data["fabrics"])
+        fabric_counts = {row["name"]: row["count"] for row in data["fabric_counts"]}
+        self.assertNotIn("Parked silk", fabric_counts)
+        self.assertNotIn("Retired silk", fabric_counts)
+        # The two already-filterable/active fabrics from setUp must still be counted —
+        # semantics of the fully-filtered fields are pinned, not just "something changed".
+        self.assertEqual(fabric_counts, {"Pure silk": 1, "Mysore silk": 1})
+
     def test_products_accept_multi_value_facets(self):
         response = self.client.get("/api/products", {"gender": "women", "color": "Red,Green"})
         self.assertEqual(response.status_code, 200)
@@ -385,6 +416,24 @@ class CatalogFacetCountTests(TestCase):
 
         response = self.client.get("/api/products", {"gender": "women", "color": "Red"})
         self.assertEqual(response.json()["total"], 1)
+
+
+class SeedCsmKeyHighlightsTests(TestCase):
+    def test_seeder_writes_the_canonical_fabric_label_into_key_highlights(self):
+        # C6: seed_csm used to write the raw fixture string ("Pure Kanjivaram Silk") into
+        # key_highlights while the typed Fabric row (from the shared FABRIC_MAP) read
+        # "Kanjivaram Silk" — both rendered on the same PDP, contradicting each other. The
+        # seeder must agree with the quick-create path (serializers.py) and use the canonical
+        # AttributeOption.label.
+        from django.core.management import call_command
+
+        from catalog.models import Product
+
+        call_command("seed_csm")
+        product = Product.objects.get(slug="ruby-bridal-kanjivaram-silk")
+        self.assertEqual(product.fabric.label, "Kanjivaram Silk")
+        self.assertEqual(product.key_highlights[0], "Kanjivaram Silk")
+        self.assertNotIn("Pure Kanjivaram Silk", product.key_highlights)
 
 
 class AttributeOptionSeedTests(TestCase):
@@ -983,3 +1032,25 @@ class ProductDetailAttributeTests(TestCase):
         self.assertIn("Fabric", labels)
         self.assertIn("Origin", labels)  # null FK — still listed
         self.assertIn("Occasion", labels)
+
+    def test_attribute_labels_is_empty_for_menswear(self):
+        # The typed-attribute vocabulary is saree-only (spec: "menswear gets no PDP
+        # spec-table changes"). If attribute_labels reported the saree label list for
+        # menswear too, the PDP's specifications-tail dedup would strip keys like
+        # Occasion/Origin that have no typed row to replace them (C2 regression).
+        from catalog.models import Category, Product
+
+        client = APIClient()
+        category = Category.objects.create(
+            name="Kurta Labels", slug="kurta-labels", gender="men", product_type="other"
+        )
+        specs = {"Brand": "CSM", "Fabric": "Silk Blend", "Occasion": "Wedding", "HSN": "6205", "Origin": "India"}
+        Product.objects.create(
+            name="Wedding Kurta", slug="wedding-kurta-labels", category=category, gender="men",
+            base_price=100, base_mrp=200, specifications=specs,
+        )
+        data = client.get("/api/products/wedding-kurta-labels").json()
+        self.assertEqual(data["attribute_labels"], [])
+        # specifications itself is an unfiltered passthrough — the dedup happens client-side
+        # against attribute_labels, so this pins the full tail is still there to dedup against.
+        self.assertEqual(data["specifications"], specs)

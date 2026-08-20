@@ -381,6 +381,7 @@ class Command(BaseCommand):
             # tables the backfill migration uses turn them into controlled options, so
             # a freshly seeded database matches a migrated one exactly.
             zari_slug, border_slug = ZARI_MAP.get(pdata["zari"], (None, None))
+            fabric_option = _option("fabric", FABRIC_MAP.get(pdata["fabric"]))
             product, _ = Product.objects.update_or_create(
                 slug=pdata["slug"],
                 defaults={
@@ -391,7 +392,7 @@ class Command(BaseCommand):
                     "gender": pdata["gender"],
                     "tags": pdata["tags"],
                     "occasions": pdata["occasions"],
-                    "fabric": _option("fabric", FABRIC_MAP.get(pdata["fabric"])),
+                    "fabric": fabric_option,
                     "zari": _option("zari", zari_slug),
                     "border": _option("border", border_slug),
                     "work": _option("work", WORK_MAP.get(pdata["zari"])),
@@ -401,7 +402,11 @@ class Command(BaseCommand):
                     "base_mrp": Decimal(pdata["mrp"]),
                     "deal_label": pdata["deal"],
                     "key_highlights": [
-                        pdata["fabric"],
+                        # Canonical option label, not the raw fixture string — matches the
+                        # quick-create path (serializers.py) so key_highlights never disagrees
+                        # with the typed Fabric row rendered on the same PDP (C6). Falls back to
+                        # the raw fixture text only if the fixture has no matching option.
+                        fabric_option.label if fabric_option else pdata["fabric"],
                         pdata["zari"],
                         "Blouse piece included" if pdata["gender"] == "women" else "Wedding and temple ready",
                         "Dry clean only",

@@ -278,7 +278,16 @@ class ProductDetailSerializer(ProductListSerializer):
         leaves null — plus Occasion. This is what the PDP's free-form `specifications`
         tail filters itself against, so a key with a typed home (even an unpopulated
         one, like a null Origin) never gets "rescued" back into view there. A new typed
-        attribute added to `_TYPED_ATTRIBUTE_FIELDS` shows up here automatically."""
+        attribute added to `_TYPED_ATTRIBUTE_FIELDS` shows up here automatically.
+
+        Saree-only (scoped by `category.product_type`, not `gender` — see the comment on
+        that field): this typed-attribute vocabulary only exists for sarees, so a
+        menswear product must report no covered labels here, or its PDP's
+        `specifications` tail would lose keys (e.g. Occasion, Origin) that have no
+        typed row to replace them. Menswear's `specifications` renders exactly as it
+        did before typed attributes existed."""
+        if obj.category.product_type != Category.ProductType.SAREE:
+            return []
         return [label for _, label in _TYPED_ATTRIBUTE_FIELDS] + ["Occasion"]
 
     def get_reviews(self, obj: Product) -> list[dict]:
@@ -447,7 +456,7 @@ class AdminProductQuickCreateSerializer(serializers.Serializer):
             # validate_zari_type's field is "zari_type" while the vocabulary key is "zari",
             # so a hardcoded dict key here would mismatch the request field entirely.
             raise serializers.ValidationError(
-                f"Unknown {key}. Add it under Admin > Attribute options first, then retry."
+                f"Unknown {key}. Add it first via POST /api/admin/attribute-options, then retry."
             )
         return option
 
