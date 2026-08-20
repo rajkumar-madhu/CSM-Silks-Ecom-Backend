@@ -244,7 +244,26 @@ class ProductDetailSerializer(ProductListSerializer):
         ]
 
 
+def _attribute_option_field(key: str) -> serializers.PrimaryKeyRelatedField:
+    # Scoped per-attribute so a fabric id can never be assigned to `zari` (or any other
+    # attribute), and a soft-deleted (is_active=False) option is rejected as "does not exist"
+    # rather than silently accepted — matches the retirement semantics of the delete view.
+    return serializers.PrimaryKeyRelatedField(
+        queryset=AttributeOption.objects.filter(key=key, is_active=True),
+        required=False,
+        allow_null=True,
+    )
+
+
 class AdminProductWriteSerializer(serializers.ModelSerializer):
+    fabric = _attribute_option_field(AttributeOption.Key.FABRIC)
+    weave = _attribute_option_field(AttributeOption.Key.WEAVE)
+    zari = _attribute_option_field(AttributeOption.Key.ZARI)
+    border = _attribute_option_field(AttributeOption.Key.BORDER)
+    pallu = _attribute_option_field(AttributeOption.Key.PALLU)
+    work = _attribute_option_field(AttributeOption.Key.WORK)
+    origin = _attribute_option_field(AttributeOption.Key.ORIGIN)
+
     class Meta:
         model = Product
         fields = [
@@ -370,8 +389,12 @@ class AdminProductQuickCreateSerializer(serializers.Serializer):
             key=key, is_active=True
         ).filter(Q(value_slug__iexact=value) | Q(label__iexact=value)).first()
         if option is None:
+            # Bare message, not {key: message}: this runs from validate_<field> (DRF keys
+            # the error to the field on its own), where a dict would double-nest — and
+            # validate_zari_type's field is "zari_type" while the vocabulary key is "zari",
+            # so a hardcoded dict key here would mismatch the request field entirely.
             raise serializers.ValidationError(
-                {key: f"Unknown {key}. Add it under Admin > Attribute options first, then retry."}
+                f"Unknown {key}. Add it under Admin > Attribute options first, then retry."
             )
         return option
 

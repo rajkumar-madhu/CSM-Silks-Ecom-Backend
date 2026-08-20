@@ -724,10 +724,31 @@ class AdminAttributeOptionTests(TestCase):
         self.staff = User.objects.create_user(
             username="attr-staff", email="staff@csm.test", password="pw12345!", is_staff=True
         )
+        self.customer = User.objects.create_user(
+            username="attr-customer", email="customer@csm.test", password="pw12345!"
+        )
 
     def test_listing_options_requires_staff(self):
         response = self.client.get("/api/admin/attribute-options")
         self.assertIn(response.status_code, (401, 403))
+
+    def test_create_rejects_authenticated_non_staff(self):
+        self.client.force_authenticate(self.customer)
+        response = self.client.post(
+            "/api/admin/attribute-options",
+            {"key": "fabric", "value_slug": "customer-silk", "label": "Customer Silk"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(AttributeOption.objects.filter(value_slug="customer-silk").exists())
+
+    def test_delete_rejects_authenticated_non_staff(self):
+        option = AttributeOption.objects.create(key="fabric", value_slug="guarded-silk", label="Guarded Silk")
+        self.client.force_authenticate(self.customer)
+        response = self.client.delete(f"/api/admin/attribute-options/{option.id}")
+        self.assertEqual(response.status_code, 403)
+        option.refresh_from_db()
+        self.assertTrue(option.is_active)
 
     def test_staff_can_list_and_filter_by_key(self):
         self.client.force_authenticate(self.staff)
@@ -842,3 +863,73 @@ class AdminAttributeOptionTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("zari_type", response.json())
+
+    def test_product_patch_rejects_an_option_from_a_different_attribute(self):
+        # The vocabulary hole quick-create closed is reopened here if left unguarded: a
+        # ModelSerializer FK field with no queryset scoping accepts *any* AttributeOption id,
+        # so a fabric option's id could be written into `zari` — a fabric label rendered as a
+        # Zari facet checkbox.
+        category = Category.objects.create(name="Kanjivaram", slug="kanjivaram-cross-attr", gender="women")
+        product = Product.objects.create(
+            name="Cross Attr Product",
+            slug="cross-attr-product",
+            category=category,
+            gender="women",
+            base_price=100,
+            base_mrp=200,
+        )
+        fabric_option = AttributeOption.objects.create(key="fabric", value_slug="cross-attr-silk", label="Cross Attr Silk")
+        self.client.force_authenticate(self.staff)
+        response = self.client.patch(
+            f"/api/admin/products/{product.id}", {"zari": fabric_option.id}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("zari", response.json())
+        product.refresh_from_db()
+        self.assertIsNone(product.zari_id)
+
+    def test_product_patch_rejects_a_soft_deleted_option(self):
+        # Retirement semantics: an inactive option must stop being *offered*, including as a
+        # value a product can be freshly re-pointed at, not just disappear from facets.
+        category = Category.objects.create(name="Kanjivaram", slug="kanjivaram-retired-attr", gender="women")
+        product = Product.objects.create(
+            name="Retired Attr Product",
+            slug="retired-attr-product",
+            category=category,
+            gender="women",
+            base_price=100,
+            base_mrp=200,
+        )
+        retired = AttributeOption.objects.create(
+            key="fabric", value_slug="retired-again-silk", label="Retired Again Silk", is_active=False
+        )
+        self.client.force_authenticate(self.staff)
+        response = self.client.patch(
+            f"/api/admin/products/{product.id}", {"fabric": retired.id}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("fabric", response.json())
+        product.refresh_from_db()
+        self.assertIsNone(product.fabric_id)
+
+    def test_quick_create_rejects_an_unknown_fabric_for_menswear_too(self):
+        # Deliberate: the seeded vocabulary is silk-only, so a menswear quick-create with an
+        # unrecognised fabric 400s just like a saree one does — free text on menswear is how
+        # this drifted in the first place, and there is no saree-only bypass.
+        Category.objects.create(name="Kurta", slug="kurta-menswear-fabric", gender="men", product_type="other")
+        self.client.force_authenticate(self.staff)
+        response = self.client.post(
+            "/api/admin/products/quick-create",
+            {
+                "name": "X",
+                "gender": "men",
+                "category_name": "Kurta",
+                "category_slug": "kurta-menswear-fabric",
+                "price": "100",
+                "mrp": "200",
+                "fabric": "Cotton",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("fabric", response.json())
