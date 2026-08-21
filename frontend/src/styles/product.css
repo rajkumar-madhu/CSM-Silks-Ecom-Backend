@@ -2057,3 +2057,251 @@
   }
 }
 
+
+/* ============================================================
+   PDP feature layer — description, chips, size & fit, rating
+   distribution, cross-sell rail. Uses only existing tokens so
+   the editorial cream/ink system stays intact.
+   ============================================================ */
+
+/* Breadcrumb is now a real <nav> of buttons (keyboard reachable).
+   The legacy .pd-breadcrumb rule sets cursor/hover on the container;
+   move both onto the crumbs themselves. */
+.pd-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  cursor: default;
+}
+.pd-breadcrumb:hover { color: var(--muted); }
+.pd-crumb {
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.pd-crumb:hover { color: var(--gold); }
+.pd-crumb:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-shadow);
+}
+.pd-crumb-current { color: var(--ink-3); }
+
+/* Section labels may carry a leading icon */
+.pd-section-lbl {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* Sold count — social proof beside the rating */
+.pd-sold {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ruby);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Description: clamped until expanded */
+.pd-desc {
+  position: relative;
+  color: var(--ink-3);
+  font-size: 14.5px;
+  line-height: 1.75;
+  transition: max-height var(--transition);
+}
+.pd-desc p { margin: 0; white-space: pre-line; }
+/* The clamp + fade only apply to descriptions long enough to actually hide
+   something; short ones render in full with no gradient over the last line. */
+.pd-desc.clamped { max-height: 96px; overflow: hidden; }
+.pd-desc.clamped::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 44px;
+  background: linear-gradient(to bottom, transparent, var(--surface));
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+.pd-desc.clamped.open { max-height: 2400px; }
+.pd-desc.clamped.open::after { opacity: 0; }
+.pd-desc-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--gold);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+}
+.pd-desc-toggle svg { transition: transform var(--transition-fast); }
+.pd-desc-toggle svg.flip { transform: rotate(180deg); }
+
+/* Occasion / tag chips */
+.pd-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pd-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.pd-chip-occasion {
+  border-color: rgba(179, 126, 40, 0.28);
+  background: rgba(179, 126, 40, 0.08);
+  color: var(--gold);
+}
+
+/* Size & fit — real variant rows only, never invented measurements */
+.pd-fit-table {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-size: 13px;
+}
+.pd-fit-head,
+.pd-fit-row {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr 0.8fr 1fr;
+  gap: 10px;
+  padding: 10px 14px;
+  align-items: center;
+}
+.pd-fit-head {
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.pd-fit-row + .pd-fit-row,
+.pd-fit-head + .pd-fit-row { border-top: 1px solid var(--line); }
+.pd-fit-row.on {
+  background: rgba(179, 126, 40, 0.07);
+  font-weight: 700;
+}
+.pd-fit-row .ok { color: var(--success); font-weight: 700; }
+.pd-fit-row .out { color: var(--soft); }
+.pd-fit-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  color: var(--green-2);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.pd-fit-help:hover { text-decoration: underline; }
+
+/* Rating distribution */
+.pd-rating-dist {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 22px;
+  align-items: center;
+  padding: 16px 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+.pd-rating-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 84px;
+}
+.pd-rating-score strong {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1;
+  color: var(--ink);
+}
+.pd-rating-stars { display: inline-flex; gap: 1px; color: var(--gold); }
+.pd-rating-score small { color: var(--soft); font-size: 11px; }
+.pd-rating-bars { display: flex; flex-direction: column; gap: 5px; }
+.pd-rating-bar {
+  display: grid;
+  grid-template-columns: 34px 1fr 26px;
+  gap: 9px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+.pdr-star { display: inline-flex; align-items: center; gap: 2px; color: var(--muted); }
+.pdr-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.pdr-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold), var(--gold-2));
+  transition: width var(--transition);
+}
+.pdr-count { text-align: right; color: var(--soft); }
+
+/* Cross-sell rail */
+.pd-related { margin: 44px auto 0; max-width: 1280px; padding: 0 16px; }
+.pd-related-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.pd-related-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 400;
+  color: var(--ink);
+}
+.pd-related-head button {
+  border: 0;
+  background: none;
+  color: var(--gold);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+}
+.pd-related-head button:hover { text-decoration: underline; }
+.pd-related-rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(216px, 1fr);
+  gap: 16px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 10px;
+  scrollbar-width: thin;
+}
+.pd-related-item { scroll-snap-align: start; min-width: 0; }
+
+@media (max-width: 720px) {
+  .pd-rating-dist { grid-template-columns: 1fr; gap: 14px; }
+  .pd-rating-score { flex-direction: row; align-items: baseline; gap: 8px; }
+  .pd-fit-head, .pd-fit-row { grid-template-columns: 0.7fr 1fr 0.7fr 0.9fr; padding: 9px 10px; gap: 6px; font-size: 12px; }
+  .pd-related-rail { grid-auto-columns: minmax(168px, 1fr); }
+  .pd-related-head h2 { font-size: 21px; }
+}

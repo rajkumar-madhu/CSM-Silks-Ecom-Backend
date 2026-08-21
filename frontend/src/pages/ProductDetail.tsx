@@ -3,12 +3,15 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import {
   BadgeCheck,
   CheckCircle2,
+  ChevronDown,
+  Flame,
   Heart,
   Loader2,
   MapPin,
   MessageCircle,
   Minus,
   Plus,
+  Ruler,
   Share2,
   ShieldCheck,
   Star,
@@ -16,6 +19,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { ProductStickyBar } from '@/components/ProductStickyBar';
+import { ProductCard } from '@/features/catalog/components/ProductCard';
 import { api, isImageAssetUrl } from '@/lib/api';
 import { productWhatsAppUrl } from '@/lib/storeContact';
 import { buildVariantImageMap, getProductImageList } from '@/lib/productImages';
@@ -47,6 +51,10 @@ export function ProductDetail() {
   const [notifyEmail, setNotifyEmail] = useState('');
   const [notifyBusy, setNotifyBusy] = useState(false);
   const [notifyMsg, setNotifyMsg] = useState('');
+  // Keyed by the product it was fetched for, so switching products never needs a
+  // synchronous reset in the effect body — stale results are ignored at render.
+  const [related, setRelated] = useState<{ forId: number; items: Product[] }>({ forId: 0, items: [] });
+  const [descExpanded, setDescExpanded] = useState(false);
   const {
     pinCode,
     setPinCode,
@@ -113,6 +121,56 @@ export function ProductDetail() {
     [activeVariant?.id, product, variantImageMap],
   );
 
+  // Cross-sell rail: same category, minus this product. Failure is silent — the rail
+  // simply does not render rather than blocking the PDP.
+  const relatedCategory = product?.category_slug;
+  const relatedGender = product?.gender;
+  const productId = product?.id;
+  useEffect(() => {
+    if (!productId || (!relatedCategory && !relatedGender)) return;
+    let cancelled = false;
+    const pick = (items: Product[]) => items.filter(item => item.id !== productId).slice(0, 8);
+
+    // Categories here are narrow (often a single product), so a category-only rail
+    // would almost always be empty. Fall back to the same gender before giving up.
+    const load = async () => {
+      if (relatedCategory) {
+        const byCategory = await api.products.list({ category: relatedCategory, page_size: 12 });
+        const items = pick(byCategory.items || []);
+        if (items.length) return items;
+      }
+      if (!relatedGender) return [];
+      const byGender = await api.products.list({ gender: relatedGender, page_size: 12 });
+      return pick(byGender.items || []);
+    };
+
+    load()
+      .then(items => {
+        if (!cancelled) setRelated({ forId: productId, items });
+      })
+      .catch(() => {
+        if (!cancelled) setRelated({ forId: productId, items: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [relatedCategory, relatedGender, productId]);
+
+  // Distribution is computed from the reviews actually loaded, so the bars always
+  // reconcile with the list below them. review_count may exceed reviews.length when
+  // the API paginates, so the bars are labelled by what we have, not by that total.
+  const ratingBars = useMemo(() => {
+    const counts = [5, 4, 3, 2, 1].map(star => ({
+      star,
+      count: reviews.filter(review => Math.round(Number(review.rating) || 0) === star).length,
+    }));
+    const total = reviews.length;
+    return counts.map(entry => ({
+      ...entry,
+      pct: total ? Math.round((entry.count / total) * 100) : 0,
+    }));
+  }, [reviews]);
+
   if (loading) {
     return (
       <div className="pd-page pd-loading-page" aria-live="polite">
@@ -142,6 +200,8 @@ export function ProductDetail() {
   }
 
   const p = product;
+  // Ignore results still in flight from a previously viewed product.
+  const relatedItems = related.forId === p.id ? related.items : [];
   const activePrice = Number(activeVariant?.price || p.price || 0);
   const activeMrp = Number(activeVariant?.mrp || p.mrp || activePrice);
   const activeStock = Number(activeVariant?.available_qty ?? p.available_qty ?? 0);
@@ -270,9 +330,15 @@ export function ProductDetail() {
         </div>
 
         <div className="pd-info">
-          <div className="pd-breadcrumb" onClick={() => navigate(p.gender === 'men' ? '/mens' : '/womens')}>
-            Home <span>/</span> {p.gender === 'men' ? "Men's Silk" : "Women's Sarees"} <span>/</span> {p.cat}
-          </div>
+          <nav className="pd-breadcrumb" aria-label="Breadcrumb">
+            <button type="button" className="pd-crumb" onClick={() => navigate('/')}>Home</button>
+            <span aria-hidden="true">/</span>
+            <button type="button" className="pd-crumb" onClick={() => navigate(p.gender === 'men' ? '/mens' : '/womens')}>
+              {p.gender === 'men' ? "Men's Silk" : "Women's Sarees"}
+            </button>
+            <span aria-hidden="true">/</span>
+            <span className="pd-crumb-current" aria-current="page">{p.cat}</span>
+          </nav>
 
           <div className="pd-title-row">
             <h1 className="pd-title">{p.name}</h1>
@@ -299,6 +365,9 @@ export function ProductDetail() {
           <div className="pd-rating">
             <span className="pd-stars"><Star size={14} fill="currentColor" /> {Number(p.avg_rating || 0).toFixed(1)}</span>
             <span>{p.review_count || 0} ratings</span>
+            {Number(p.total_sold) > 0 && (
+              <span className="pd-sold"><Flame size={13} /> {Number(p.total_sold).toLocaleString('en-IN')} sold</span>
+            )}
             {activeVariant?.sku && <span className="pd-sku">SKU: {activeVariant.sku}</span>}
           </div>
 
@@ -451,6 +520,46 @@ export function ProductDetail() {
             </form>
           )}
 
+          {p.description?.trim() && (() => {
+            const body = p.description.trim();
+            // Only clamp when there is genuinely more to reveal — otherwise a short
+            // description gets a fade gradient laid over its final line for no reason.
+            const clampable = body.length > 260;
+            return (
+              <>
+                <div className="pd-section-lbl">About this weave</div>
+                <div className={`pd-desc ${clampable ? 'clamped' : ''} ${descExpanded ? 'open' : ''}`}>
+                  <p>{body}</p>
+                </div>
+                {clampable && (
+                  <button
+                    type="button"
+                    className="pd-desc-toggle"
+                    onClick={() => setDescExpanded(open => !open)}
+                    aria-expanded={descExpanded}
+                  >
+                    {descExpanded ? 'Show less' : 'Read more'}
+                    <ChevronDown size={15} className={descExpanded ? 'flip' : ''} />
+                  </button>
+                )}
+              </>
+            );
+          })()}
+
+          {(!!p.occasions?.length || !!p.tags?.length) && (
+            <>
+              <div className="pd-section-lbl">Styled for</div>
+              <div className="pd-chips">
+                {(p.occasions || []).map(item => (
+                  <span key={`occ-${item}`} className="pd-chip pd-chip-occasion">{item}</span>
+                ))}
+                {(p.tags || []).map(item => (
+                  <span key={`tag-${item}`} className="pd-chip">#{item}</span>
+                ))}
+              </div>
+            </>
+          )}
+
           <div className="pd-section-lbl">Product details</div>
           <div className="pd-attrs">
             {attrs.map(([label, value]) => (
@@ -460,6 +569,41 @@ export function ProductDetail() {
               </div>
             ))}
           </div>
+
+          {/* Size & fit is rendered strictly from recorded variant rows. There is no
+              measurement data on ProductVariant, so no cm/inch chart is shown rather
+              than a guessed one — same rule the attribute table follows. */}
+          {(p.variants || []).some(variant => variant.size) && (
+            <>
+              <div className="pd-section-lbl"><Ruler size={15} /> Size &amp; fit</div>
+              <div className="pd-fit-table">
+                <div className="pd-fit-head">
+                  <span>Size</span><span>Fabric</span><span>Length</span><span>Availability</span>
+                </div>
+                {(p.variants || []).filter(variant => variant.size).map(variant => (
+                  <div
+                    key={variant.id}
+                    className={`pd-fit-row ${variant.size === selectedSize ? 'on' : ''}`}
+                  >
+                    <span>{variant.size}</span>
+                    <span>{variant.fabric || '—'}</span>
+                    <span>{variant.length_meters ? `${variant.length_meters} m` : '—'}</span>
+                    <span className={Number(variant.available_qty) > 0 ? 'ok' : 'out'}>
+                      {Number(variant.available_qty) > 0 ? `${variant.available_qty} left` : 'Sold out'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <a
+                className="pd-fit-help"
+                href={productWhatsAppUrl({ name: p.name, sku: activeVariant?.sku, price: activePrice })}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                <MessageCircle size={14} /> Unsure of your size? Ask our Kanchipuram team
+              </a>
+            </>
+          )}
 
           {!!p.key_highlights?.length && (
             <>
@@ -511,6 +655,34 @@ export function ProductDetail() {
               <strong>Ratings &amp; reviews</strong>
               <span>{Number(p.avg_rating || 0).toFixed(1)} average</span>
             </div>
+            {reviews.length > 0 && (
+              <div className="pd-rating-dist">
+                <div className="pd-rating-score">
+                  <strong>{Number(p.avg_rating || 0).toFixed(1)}</strong>
+                  <span className="pd-rating-stars" aria-hidden="true">
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <Star
+                        key={star}
+                        size={13}
+                        fill={star <= Math.round(Number(p.avg_rating) || 0) ? 'currentColor' : 'none'}
+                      />
+                    ))}
+                  </span>
+                  <small>{reviews.length} shown</small>
+                </div>
+                <div className="pd-rating-bars">
+                  {ratingBars.map(bar => (
+                    <div className="pd-rating-bar" key={bar.star}>
+                      <span className="pdr-star">{bar.star}<Star size={10} fill="currentColor" /></span>
+                      <span className="pdr-track">
+                        <span className="pdr-fill" style={{ width: `${bar.pct}%` }} />
+                      </span>
+                      <span className="pdr-count">{bar.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {(reviews.length ? reviews : []).slice(0, 4).map(review => (
               <div className="pd-review" key={review.id}>
                 <div><Star size={13} fill="currentColor" /> {review.rating}</div>
@@ -522,6 +694,62 @@ export function ProductDetail() {
           </div>
         </div>
       </div>
+
+      {relatedItems.length > 0 && (
+        <section className="pd-related" aria-labelledby="pd-related-title">
+          <div className="pd-related-head">
+            <h2 id="pd-related-title">More from {p.cat}</h2>
+            <button type="button" onClick={() => navigate(p.gender === 'men' ? '/mens' : '/womens')}>
+              View all
+            </button>
+          </div>
+          <div className="pd-related-rail">
+            {relatedItems.map(item => (
+              <div className="pd-related-item" key={item.id}>
+                <ProductCard product={item} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Product structured data for search engines. Every value is taken from the
+          live record — no rating node is emitted when the product has no ratings,
+          since Google treats an invented aggregateRating as a policy violation. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            name: p.name,
+            description: p.description || p.hook || undefined,
+            sku: activeVariant?.sku || undefined,
+            brand: { '@type': 'Brand', name: p.brand || 'CSM Silks' },
+            category: p.cat || undefined,
+            image: imageList.filter(isImageAssetUrl).slice(0, 6),
+            offers: {
+              '@type': 'Offer',
+              priceCurrency: 'INR',
+              price: activePrice,
+              availability: canPurchase
+                ? 'https://schema.org/InStock'
+                : 'https://schema.org/OutOfStock',
+              url: typeof window !== 'undefined' ? window.location.href : undefined,
+              seller: { '@type': 'Organization', name: p.seller_name || 'CSM Silks Kanchipuram' },
+            },
+            ...(Number(p.review_count) > 0 && Number(p.avg_rating) > 0
+              ? {
+                  aggregateRating: {
+                    '@type': 'AggregateRating',
+                    ratingValue: Number(p.avg_rating).toFixed(1),
+                    reviewCount: Number(p.review_count),
+                  },
+                }
+              : {}),
+          }),
+        }}
+      />
 
       <ProductStickyBar
         price={activePrice}
