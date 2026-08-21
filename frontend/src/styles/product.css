@@ -2305,3 +2305,65 @@
   .pd-related-rail { grid-auto-columns: minmax(168px, 1fr); }
   .pd-related-head h2 { font-size: 21px; }
 }
+
+/* ============================================================
+   Reference-informed pass (benchmark: styleunion.in PDP).
+   Patterns adopted: "Label : value" selection readback, an
+   up-front delivery window, and an icon trust triplet.
+   Their visual language (dense white/red marketplace) is NOT
+   adopted — the cream/ink editorial system stays.
+   ============================================================ */
+
+/* Selected value echoed in the section label */
+.pd-lbl-val {
+  color: var(--ink);
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: none;
+}
+
+/* Delivery window shown before a PIN is entered */
+.pd-eta-note {
+  margin: 2px 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Trust triplet under the CTA */
+.pd-trust {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 22px 0 14px;
+  padding: 18px 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+}
+.pd-trust-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.pd-trust-item svg { color: var(--gold); margin-bottom: 2px; }
+.pd-trust-item strong {
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.pd-trust-item span {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+@media (max-width: 520px) {
+  .pd-trust { gap: 6px; padding: 14px 6px; }
+  .pd-trust-item strong { font-size: 11px; letter-spacing: 0.3px; }
+  .pd-trust-item span { font-size: 10.5px; }
+}

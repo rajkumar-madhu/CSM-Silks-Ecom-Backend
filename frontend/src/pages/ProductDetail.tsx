@@ -4,6 +4,7 @@ import {
   BadgeCheck,
   CheckCircle2,
   ChevronDown,
+  FileText,
   Flame,
   Heart,
   Loader2,
@@ -11,6 +12,7 @@ import {
   MessageCircle,
   Minus,
   Plus,
+  RotateCcw,
   Ruler,
   Share2,
   ShieldCheck,
@@ -213,6 +215,9 @@ export function ProductDetail() {
   const p = product;
   // Ignore results still in flight from a previously viewed product.
   const relatedItems = related.forId === p.id ? related.items : [];
+  const selectedColorName = (p.variants?.[selectedColor]?.color_name || '').trim();
+  const etaMin = Number(p.delivery_min_days) || 0;
+  const etaMax = Number(p.delivery_max_days) || 0;
   const activePrice = Number(activeVariant?.price || p.price || 0);
   const activeMrp = Number(activeVariant?.mrp || p.mrp || activePrice);
   const activeStock = Number(activeVariant?.available_qty ?? p.available_qty ?? 0);
@@ -405,6 +410,13 @@ export function ProductDetail() {
                 {isChecking ? 'Checking' : deliveryStatus === 'ready' ? 'Live' : 'PIN check'}
               </span>
             </div>
+            {/* Give a delivery window before any PIN is typed — the recorded
+                per-product range, not a guess. Suppressed if unset. */}
+            {etaMin > 0 && etaMax > 0 && (
+              <div className="pd-eta-note">
+                Estimated delivery {etaMin}–{etaMax} working days
+              </div>
+            )}
             <form className="pd-pin-row" onSubmit={submitDeliveryCheck}>
               <input
                 value={pinCode}
@@ -434,7 +446,11 @@ export function ProductDetail() {
 
           {sizeOptions.length > 0 && (
             <>
-              <div className="pd-section-lbl">Select size</div>
+              {/* "Label : value" reads the current selection back to the shopper,
+                  rather than a bare instruction that never changes. */}
+              <div className="pd-section-lbl">
+                Size{selectedSize ? <span className="pd-lbl-val"> : {selectedSize}</span> : null}
+              </div>
               <div className="pd-size-row">
                 {sizeOptions.map(size => {
                   const stock = getVariantStockForSize(p, size, selectedColor);
@@ -458,7 +474,11 @@ export function ProductDetail() {
             </>
           )}
 
-          <div className="pd-section-lbl">Select colour</div>
+          {/* Colour name only when the variant actually records one — unnamed
+              swatches stay unlabelled rather than inventing "Colour 1". */}
+          <div className="pd-section-lbl">
+            Colour{selectedColorName ? <span className="pd-lbl-val"> : {selectedColorName}</span> : null}
+          </div>
           <div className="pd-colors">
             {(p.variants?.length ? p.variants : p.colors.map((c, i) => ({ id: i, color_hex: c }))).map((v, i) => (
               <button
@@ -627,11 +647,29 @@ export function ProductDetail() {
             </>
           )}
 
+          {/* Trust triplet: icon + promise + qualifier, instead of a flat chip list.
+              Return window comes from the product record, not a hardcoded 15. */}
+          <div className="pd-trust">
+            <div className="pd-trust-item">
+              <Truck size={20} />
+              <strong>Free shipping</strong>
+              <span>On orders above Rs 999</span>
+            </div>
+            <div className="pd-trust-item">
+              <RotateCcw size={20} />
+              <strong>Easy returns</strong>
+              <span>Within {p.return_days || 15} days</span>
+            </div>
+            <div className="pd-trust-item">
+              <FileText size={20} />
+              <strong>GST invoice</strong>
+              <span>Included with every order</span>
+            </div>
+          </div>
           <div className="pd-guarantee">
             <div className="pd-g">Free {p.gender === 'men' ? 'matching piece' : 'blouse'} included where applicable</div>
-            <div className="pd-g">15-day easy returns</div>
-            <div className="pd-g">Free pan-India shipping above Rs 999</div>
-            <div className="pd-g">GST invoice provided</div>
+            {p.exchange_available && <div className="pd-g">Exchange support</div>}
+            <div className="pd-g">Quality checked before dispatch</div>
           </div>
 
           <div className="pd-seller">
