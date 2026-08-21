@@ -2072,3 +2072,380 @@
 [data-theme="dark"] .status-badge {
   filter: brightness(1.15);
 }
+
+/* ============================================================
+   DASHBOARD INSIGHTS — chart panel (DashboardInsights.tsx) and
+   the hand-rolled SVG charts in features/admin/charts/.
+   Everything here reads --admin-* tokens, which .admin-shell pins to
+   the warm atelier palette regardless of theme — so these surfaces
+   track the rest of the console automatically and need no dark
+   override of their own (see the note further down).
+   ============================================================ */
+
+.dash-insights {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 18px 0;
+}
+
+.dash-insights-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dash-insights-head h3 {
+  margin-top: 2px;
+  color: var(--admin-text);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+/* Segmented range control (7d / 30d / 90d). */
+.dash-range {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--admin-line);
+  border-radius: 999px;
+  background: var(--admin-panel);
+}
+
+.dash-range button {
+  min-height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--admin-muted);
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.dash-range button.on {
+  background: var(--gold);
+  color: #fff;
+}
+
+.dash-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dash-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--radius);
+  background: var(--admin-panel);
+}
+
+.dash-summary-card span {
+  color: var(--admin-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.dash-summary-card strong {
+  color: var(--admin-text);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.dash-summary-card.is-loading strong {
+  color: var(--admin-muted);
+}
+
+.kpi-spark {
+  width: 100%;
+  height: 30px;
+  margin-top: 6px;
+  overflow: visible;
+}
+
+.chart-subtitle {
+  margin-left: 8px;
+  color: var(--admin-muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.chart-empty {
+  padding: 28px 0;
+  color: var(--admin-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* --- SVG chart internals ------------------------------------------------ */
+
+.chart-plot svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.chart-grid {
+  stroke: var(--admin-line);
+  stroke-width: 1;
+}
+
+.chart-axis {
+  fill: var(--admin-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* Shared by AreaChart and Sparkline — `stroke` is set per series inline. */
+.chart-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart-hover-line {
+  stroke: var(--admin-muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  margin-top: 10px;
+  color: var(--admin-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.chart-legend strong {
+  color: var(--admin-text);
+  font-weight: 800;
+}
+
+/* Pushed to the right so the hovered date reads as a caption for the whole chart
+   rather than as another series in the legend. */
+.chart-legend-when {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Horizontal bar list ------------------------------------------------ */
+
+.chart-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  list-style: none;
+}
+
+.chart-bar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.chart-bar-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--admin-text);
+  font-weight: 600;
+}
+
+.chart-bar-head strong {
+  color: var(--admin-text);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.chart-bar-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--admin-panel-2);
+  overflow: hidden;
+}
+
+.chart-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width var(--transition);
+}
+
+.chart-bar-note {
+  display: block;
+  margin-top: 4px;
+  color: var(--admin-muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* --- Donut -------------------------------------------------------------- */
+
+.chart-donut {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.chart-donut svg {
+  flex: 0 0 auto;
+  width: 140px;
+  height: 140px;
+  /* Segments start at 12 o'clock; a stroked circle otherwise starts at 3 o'clock. */
+  transform: rotate(-90deg);
+}
+
+.chart-donut-track {
+  fill: none;
+  stroke: var(--admin-panel-2);
+  stroke-width: 16;
+}
+
+.chart-donut-seg {
+  fill: none;
+  stroke-width: 16;
+  transition: stroke-dasharray var(--transition);
+}
+
+/* Counter-rotates the centre text out of the -90deg applied to the whole svg. */
+.chart-donut-value,
+.chart-donut-label {
+  transform: rotate(90deg);
+  transform-origin: 70px 70px;
+}
+
+.chart-donut-value {
+  fill: var(--admin-text);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.chart-donut-label {
+  fill: var(--admin-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.chart-donut-legend {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+}
+
+.chart-donut-legend li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.chart-donut-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.chart-donut-legend span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--admin-text);
+  font-weight: 600;
+}
+
+.chart-donut-legend strong {
+  color: var(--admin-text);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.chart-donut-legend em {
+  min-width: 34px;
+  color: var(--admin-muted);
+  font-size: 11.5px;
+  font-style: normal;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* No [data-theme="dark"] rules here on purpose: .admin-shell redefines every --admin-*
+   token locally (top of this file), so the console keeps its warm atelier palette in both
+   themes and a dark override inside the shell would never resolve. These surfaces read the
+   same tokens as .chart-card, so they follow the console rather than diverging from it. */
+
+/* The paired cards size to their own content. Left stretching, a short donut card next to a
+   tall top-products list renders as a card that is mostly empty. */
+.dash-insights .chart-row-2 {
+  align-items: start;
+}
+
+@media (max-width: 1020px) {
+  .dash-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  /* The paired chart cards stack; a donut plus its legend cannot share a half-width
+     column at this size. */
+  .chart-row-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chart-donut {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .chart-donut svg {
+    align-self: center;
+  }
+}
+
+@media (max-width: 520px) {
+  .dash-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dash-insights-head {
+    align-items: flex-start;
+  }
+}

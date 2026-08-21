@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from analytics.models import AdminAuditLog
+from analytics.views import insight_window
 from orders.models import Order, ReturnRequest
 from payments.models import Payment
 
@@ -315,3 +317,110 @@ class FrontendNotificationPaginationCoverageTests(SimpleTestCase):
     def test_notifications_page_uses_paged_load_more_flow(self):
         self.assertIn("NOTIFICATION_PAGE_SIZE", self.notifications_source)
         self.assertIn("loadNotificationPage(pageInfo.page + 1, true)", self.notifications_source)
+
+
+class AdminInsightsApiTests(TestCase):
+    """The dashboard charts read straight off /api/admin/insights, so the shapes asserted
+    here (gap-filled series, clamped window, per-bucket breakdowns) are load-bearing."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            username="insights-admin",
+            email="insights-admin@example.com",
+            password="admin123",
+            is_staff=True,
+        )
+        self.customer = User.objects.create_user(
+            username="+919822222222",
+            phone="+919822222222",
+            password="customer123",
+            is_verified=True,
+        )
+        self.client.force_authenticate(self.admin)
+
+    def make_paid_order(self, number, amount, *, refunded="0.00", method=Payment.Method.UPI, days_ago=0):
+        order = Order.objects.create(
+            order_number=number,
+            user=self.customer,
+            subtotal=Decimal(amount),
+            cgst_amount=Decimal("0.00"),
+            sgst_amount=Decimal("0.00"),
+            total_amount=Decimal(amount),
+            status=Order.Status.DELIVERED,
+            payment_method=Order.PaymentMethod.RAZORPAY,
+        )
+        if days_ago:
+            # created_at is auto_now_add, so backdating needs an update() that skips the field default.
+            moment = timezone.now() - timedelta(days=days_ago)
+            Order.objects.filter(pk=order.pk).update(created_at=moment)
+            order.refresh_from_db()
+        Payment.objects.create(
+            order=order,
+            amount=Decimal(amount),
+            method=method,
+            status=Payment.Status.PARTIALLY_REFUNDED if Decimal(refunded) else Payment.Status.CAPTURED,
+            razorpay_order_id=f"order_{number}",
+            razorpay_payment_id=f"pay_{number}",
+            is_hmac_verified=True,
+            refunded_amount=Decimal(refunded),
+            paid_at=timezone.now(),
+        )
+        return order
+
+    def test_series_is_gap_filled_across_the_whole_window(self):
+        self.make_paid_order("CSM-IN-1", "1000.00")
+
+        response = self.client.get("/api/admin/insights?days=7")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["days"], 7)
+        # One row per calendar day, including the six days with no orders at all.
+        self.assertEqual(len(body["revenue_series"]), 7)
+        self.assertEqual(body["revenue_series"][-1]["date"], timezone.localdate().isoformat())
+        self.assertEqual([money(row["net"]) for row in body["revenue_series"][:-1]], [Decimal("0.00")] * 6)
+        self.assertEqual(money(body["revenue_series"][-1]["net"]), Decimal("1000.00"))
+
+    def test_totals_net_out_refunds_and_average_over_paid_orders(self):
+        self.make_paid_order("CSM-IN-A", "1000.00", refunded="200.00")
+        self.make_paid_order("CSM-IN-B", "600.00")
+
+        body = self.client.get("/api/admin/insights?days=30").json()
+
+        self.assertEqual(money(body["totals"]["gross"]), Decimal("1600.00"))
+        self.assertEqual(money(body["totals"]["refunds"]), Decimal("200.00"))
+        self.assertEqual(money(body["totals"]["net"]), Decimal("1400.00"))
+        self.assertEqual(body["totals"]["paid_orders"], 2)
+        self.assertEqual(money(body["totals"]["avg_order_value"]), Decimal("700.00"))
+
+    def test_breakdowns_bucket_by_status_and_payment_method(self):
+        self.make_paid_order("CSM-IN-UPI", "500.00", method=Payment.Method.UPI)
+        self.make_paid_order("CSM-IN-CARD", "300.00", method=Payment.Method.CARD)
+
+        body = self.client.get("/api/admin/insights?days=30").json()
+
+        self.assertEqual([row["status"] for row in body["orders_by_status"]], ["delivered"])
+        self.assertEqual(body["orders_by_status"][0]["count"], 2)
+        methods = {row["method"]: money(row["amount"]) for row in body["payment_mix"]}
+        self.assertEqual(methods, {"upi": Decimal("500.00"), "card": Decimal("300.00")})
+
+    def test_window_outside_the_offered_set_is_clamped_not_honoured(self):
+        # Guards the query param: an arbitrary `days` must not become an arbitrary scan.
+        self.assertEqual(insight_window({"days": "9999"}), 365)
+        self.assertEqual(insight_window({"days": "1"}), 7)
+        self.assertEqual(insight_window({"days": "not-a-number"}), 30)
+        self.assertEqual(insight_window({}), 30)
+        self.assertEqual(self.client.get("/api/admin/insights?days=9999").json()["days"], 365)
+
+    def test_orders_outside_the_window_are_excluded(self):
+        self.make_paid_order("CSM-IN-OLD", "5000.00", days_ago=40)
+        self.make_paid_order("CSM-IN-NEW", "100.00")
+
+        body = self.client.get("/api/admin/insights?days=7").json()
+
+        self.assertEqual(money(body["totals"]["net"]), Decimal("100.00"))
+
+    def test_requires_staff(self):
+        self.client.force_authenticate(self.customer)
+        self.assertEqual(self.client.get("/api/admin/insights").status_code, 403)

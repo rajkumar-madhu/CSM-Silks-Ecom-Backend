@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { AdminCatalogManager } from '@/features/admin/components/AdminCatalogManager';
 import { AdminChoice } from '@/features/admin/components/AdminChoice';
+import { DashboardInsights } from '@/features/admin/components/DashboardInsights';
 import { ADMIN_STATUS_CLASS, ORDER_STATUS_LABEL, formatDateTime, latestTrackingEvent, lifecycleProgress, sortTrackingEvents } from '@/lib/orderLifecycle';
 import { useCatalogLiveRefresh } from '@/lib/useCatalogLiveRefresh';
 import { connectOrderRealtime, type RealtimeStatus } from '@/lib/realtime';
@@ -587,6 +588,7 @@ function AdminDashboard({ onOpenPage }: { onOpenPage: (page: AdminPage) => void 
           </button>
         ))}
       </div>
+      <DashboardInsights />
       <div className="chart-card dash-orders">
         <div className="chart-title chart-title-between">
           <span>Recent orders</span>

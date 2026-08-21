@@ -484,3 +484,37 @@ export interface AppNotification {
   is_read: boolean;
   created_at?: string;
 }
+
+
+/** One gap-filled calendar day from /api/admin/insights. Money arrives as exact decimal strings. */
+export interface InsightDay {
+  date: string;
+  gross: number | string;
+  refunds: number | string;
+  net: number | string;
+  orders: number;
+  paid_orders: number;
+  customers: number;
+}
+
+export interface AdminInsights {
+  days: number;
+  start: string;
+  end: string;
+  /** Windows the server will honour; anything else is clamped to the nearest of these. */
+  windows: number[];
+  totals: {
+    gross: number | string;
+    refunds: number | string;
+    net: number | string;
+    orders: number;
+    paid_orders: number;
+    customers: number;
+    avg_order_value: number | string;
+  };
+  revenue_series: InsightDay[];
+  orders_by_status: Array<{ status: string; label: string; count: number }>;
+  top_products: Array<{ name: string; units: number; revenue: number | string }>;
+  category_mix: Array<{ category: string; units: number; revenue: number | string }>;
+  payment_mix: Array<{ method: string; label: string; count: number; amount: number | string }>;
+}

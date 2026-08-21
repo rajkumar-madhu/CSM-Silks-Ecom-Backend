@@ -4,6 +4,7 @@ import type {
   AdminCoupon,
   AdminReview,
   AdminProductQuickCreatePayload,
+  AdminInsights,
   AdminInventoryRow,
   AdminShipment,
   CartResponse,
@@ -482,6 +483,7 @@ export const api = {
 
   admin: {
     dashboard: () => request<AdminDashboardResponse>('/admin/dashboard'),
+    insights: (days?: number) => request<AdminInsights>(`/admin/insights${days ? `?days=${days}` : ''}`),
     products: (params?: QueryParams) => {
       const qs = queryString(params);
       return request<PaginatedResponse<Product>>(`/admin/products${qs}`).then(data => ({
