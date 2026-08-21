@@ -129,19 +129,30 @@ export function ProductDetail() {
   useEffect(() => {
     if (!productId || (!relatedCategory && !relatedGender)) return;
     let cancelled = false;
-    const pick = (items: Product[]) => items.filter(item => item.id !== productId).slice(0, 8);
-
-    // Categories here are narrow (often a single product), so a category-only rail
-    // would almost always be empty. Fall back to the same gender before giving up.
+    // Categories here are narrow — often one or two products — so a category-only
+    // rail reads as unfinished. Lead with same-category matches, then top up from
+    // the same gender until the rail is worth showing.
+    const MIN_RAIL = 4;
     const load = async () => {
+      const found: Product[] = [];
+      const seen = new Set<number>([productId]);
+      const absorb = (items: Product[]) => {
+        for (const item of items) {
+          if (seen.has(item.id)) continue;
+          seen.add(item.id);
+          found.push(item);
+        }
+      };
+
       if (relatedCategory) {
         const byCategory = await api.products.list({ category: relatedCategory, page_size: 12 });
-        const items = pick(byCategory.items || []);
-        if (items.length) return items;
+        absorb(byCategory.items || []);
       }
-      if (!relatedGender) return [];
-      const byGender = await api.products.list({ gender: relatedGender, page_size: 12 });
-      return pick(byGender.items || []);
+      if (found.length < MIN_RAIL && relatedGender) {
+        const byGender = await api.products.list({ gender: relatedGender, page_size: 16 });
+        absorb(byGender.items || []);
+      }
+      return found.slice(0, 8);
     };
 
     load()
@@ -698,7 +709,11 @@ export function ProductDetail() {
       {relatedItems.length > 0 && (
         <section className="pd-related" aria-labelledby="pd-related-title">
           <div className="pd-related-head">
-            <h2 id="pd-related-title">More from {p.cat}</h2>
+            {/* Only claim the category when every card actually belongs to it —
+                the rail tops up from the same gender when the category is thin. */}
+            <h2 id="pd-related-title">
+              {relatedItems.every(item => item.cat === p.cat) ? `More from ${p.cat}` : 'You may also like'}
+            </h2>
             <button type="button" onClick={() => navigate(p.gender === 'men' ? '/mens' : '/womens')}>
               View all
             </button>
