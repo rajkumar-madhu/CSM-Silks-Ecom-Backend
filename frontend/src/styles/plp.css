@@ -4,10 +4,9 @@
    Shared across every filter group (Category, Price, Colour, Discount,
    Rating, Availability, and the generic saree attribute groups), so
    styling these classes once fixes the whole filter rail at the same
-   time. Deliberately scoped to plp-body/plp-main (the aside's own
-   container) plus the sidebar/chip surface — the banners, product
-   grid, mobile drawer/sheet and mobile bar live elsewhere and are not
-   touched here.
+   time. The rest of the PLP surface — page shell, banner, category
+   tiles, sort bar, product grid, mobile drawer/sheet and the `nykaa`
+   card layout — follows in the second block at the bottom of this file.
    ============================================================ */
 
 .plp-body {
@@ -74,6 +73,15 @@
   .plp-mobile-bar button:active {
     border-color: var(--gold);
     color: var(--gold);
+  }
+}
+
+@media (max-width: 768px) {
+  /* .mob-bottom-nav (layout.css) takes over the bottom edge at this width, so the
+     Sort/Filter bar stacks directly above it instead of covering it. */
+  .plp-mobile-bar {
+    bottom: var(--bottom-nav-total);
+    padding-bottom: 10px;
   }
 }
 
@@ -248,4 +256,693 @@
 .plp-chip--clear:hover {
   border-color: var(--danger);
   color: var(--danger);
+}
+
+/* ============================================================
+   PLP page shell, promo banner + category tiles, sort bar,
+   product grid, mobile drawer/sheet, and the `nykaa` ProductCard
+   layout. Everything below is PLP-only: the classes are emitted
+   solely by CatalogPlp/PlpBanners/PlpSortBar and by the
+   `layout="nykaa"` branch of ProductCard, so nothing here can
+   reach the Home/Search/PDP grids that use the default and
+   `retail` card layouts.
+   ============================================================ */
+
+/* The storefront <main> applies no gutter of its own (layout.css only sets a
+   min-height), so the page container has to supply both max-width and padding.
+   Deliberately wider than --container-max (1240px): that width leaves the grid
+   only ~840px once the 280px filter rail is subtracted, which is three columns.
+   1440px buys a fourth column on a desktop screen, which is what makes the
+   listing read as dense rather than as a three-up editorial grid. */
+.plp {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 20px var(--page-gutter) 64px;
+}
+
+/* --- Promo banner ------------------------------------------------------- */
+
+.plp-top {
+  margin-bottom: 22px;
+}
+
+.plp-banner {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  background: var(--surface-2);
+}
+
+.plp-banner-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Tone tints the shade rather than the copy, so the same white text stays legible
+   over any of the three palettes without a per-tone colour rule. */
+.plp-banner-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(20, 16, 13, 0.82) 0%, rgba(20, 16, 13, 0.55) 46%, rgba(20, 16, 13, 0.1) 100%);
+}
+
+.plp-banner--pink .plp-banner-shade {
+  background: linear-gradient(90deg, rgba(122, 27, 45, 0.86) 0%, rgba(122, 27, 45, 0.5) 48%, rgba(122, 27, 45, 0.08) 100%);
+}
+
+.plp-banner--gold .plp-banner-shade {
+  background: linear-gradient(90deg, rgba(90, 60, 12, 0.86) 0%, rgba(140, 96, 24, 0.48) 48%, rgba(179, 126, 40, 0.08) 100%);
+}
+
+.plp-banner-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 560px;
+  padding: 32px clamp(20px, 4vw, 44px);
+  color: #fff;
+}
+
+.plp-banner-kicker {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.plp-banner-copy h2 {
+  font-family: var(--font-display);
+  font-size: clamp(26px, 3.4vw, 40px);
+  font-weight: 400;
+  line-height: 1.12;
+  color: #fff;
+}
+
+.plp-banner-copy p {
+  margin-top: 8px;
+  max-width: 46ch;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.plp-banner-cta {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 16px;
+  min-height: 40px;
+  padding: 0 20px;
+  border-radius: 999px;
+  background: #fff;
+  /* Literal, not var(--ink): the pill/button is fixed white in both themes, and --ink
+     flips to a near-white in dark mode, which would leave white text on white. */
+  color: #14100d;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-decoration: none;
+  transition: transform var(--transition-fast);
+}
+.plp-banner-cta:hover {
+  transform: translateY(-2px);
+}
+
+.plp-banner-dots {
+  position: absolute;
+  z-index: 2;
+  left: clamp(20px, 4vw, 44px);
+  bottom: 18px;
+  display: flex;
+  gap: 7px;
+}
+
+.plp-banner-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  transition: width var(--transition-fast), background var(--transition-fast);
+}
+.plp-banner-dot.on {
+  width: 22px;
+  background: #fff;
+}
+
+/* --- Circular category tiles -------------------------------------------- */
+
+/* Horizontal scroller rather than a wrapping grid: the tile strip is a
+   secondary navigation aid and must never push the product grid below the
+   fold when a category has many tiles. */
+.plp-tiles {
+  display: flex;
+  gap: clamp(14px, 2.4vw, 26px);
+  margin-top: 18px;
+  padding-bottom: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.plp-tiles::-webkit-scrollbar {
+  display: none;
+}
+
+.plp-tile {
+  flex: 0 0 auto;
+  width: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.plp-tile-ring {
+  display: block;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  padding: 3px;
+  background: var(--surface);
+  border: 2px solid var(--line);
+  overflow: hidden;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.plp-tile-ring img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.plp-tile:hover .plp-tile-ring {
+  transform: translateY(-2px);
+  border-color: var(--gold-2);
+}
+
+.plp-tile.active .plp-tile-ring {
+  border-color: var(--gold);
+}
+
+.plp-tile-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--ink-2);
+}
+
+.plp-tile.active .plp-tile-label {
+  color: var(--gold);
+  font-weight: 800;
+}
+
+/* --- Sort bar + result count -------------------------------------------- */
+
+.plp-sortbar-wrap {
+  margin-bottom: 16px;
+}
+
+.plp-sortbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.plp-sortbar-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.plp-sortbar-title h1 {
+  font-family: var(--font-display);
+  font-size: clamp(22px, 2.6vw, 30px);
+  font-weight: 400;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.plp-sortbar-count {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.plp-sort-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.plp-sort-select select {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.plp-sort-select select:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: var(--focus-shadow);
+}
+
+/* --- Product grid + infinite-scroll sentinel ---------------------------- */
+
+.plp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 214px), 1fr));
+  gap: 22px 14px;
+}
+
+/* Zero-height probe the IntersectionObserver watches (600px rootMargin does the
+   real work) — it must not add layout of its own between grid and footer. */
+.plp-sentinel {
+  height: 1px;
+}
+
+.plp-grid-footer {
+  padding: 22px 0 4px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* --- Mobile drawer (filters) and bottom sheet (sort) -------------------- */
+
+/* Set on <body> while either overlay is open so the page behind cannot scroll
+   under the fixed drawer. */
+body.plp-locked {
+  overflow: hidden;
+}
+
+.plp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+}
+
+.plp-overlay-shade {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: rgba(20, 16, 13, 0.5);
+  cursor: pointer;
+}
+
+.plp-drawer {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: min(88vw, 360px);
+  display: flex;
+  flex-direction: column;
+  background: var(--page);
+  box-shadow: var(--shadow-lg);
+}
+
+.plp-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.plp-drawer-head strong {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.plp-drawer-head button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.plp-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+/* The drawer supplies its own chrome, so the sidebar card inside it drops the
+   border/shadow it carries on the desktop rail. */
+.plp-drawer-body .plp-filters {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+/* .plp-drawer-head already reads "Filters", so the sidebar card's own header is a
+   duplicate here. It collapses entirely, except when it still carries a "Clear all (n)"
+   button — that has nowhere else to go, so the head survives as a right-aligned strip. */
+.plp-drawer-body .plp-filters-head {
+  display: none;
+}
+
+.plp-drawer-body .plp-filters-head:has(.plp-clear-all) {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 6px;
+  border-bottom: 0;
+}
+
+.plp-drawer-body .plp-filters-head strong {
+  display: none;
+}
+
+.plp-drawer-apply {
+  flex-shrink: 0;
+  min-height: 48px;
+  margin: 0;
+  padding: 0 16px calc(env(safe-area-inset-bottom));
+  border: 0;
+  background: var(--ink);
+  color: var(--page);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+}
+
+.plp-sheet {
+  position: absolute;
+  inset: auto 0 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--surface);
+  padding-bottom: env(safe-area-inset-bottom);
+  overflow: hidden;
+}
+
+.plp-sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.plp-sheet-row:last-child {
+  border-bottom: 0;
+}
+
+.plp-sheet-row input[type='radio'] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
+@media (max-width: 860px) {
+  /* Clear the fixed .plp-mobile-bar so the last grid row and its footer stay reachable. */
+  .plp {
+    padding-bottom: calc(72px + var(--bottom-nav-total));
+  }
+}
+
+@media (max-width: 640px) {
+  .plp-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 10px;
+  }
+
+  .plp-banner {
+    min-height: 200px;
+  }
+
+  .plp-tile {
+    width: 76px;
+  }
+
+  .plp-tile-ring {
+    width: 64px;
+    height: 64px;
+  }
+}
+
+/* --- `nykaa` ProductCard layout ----------------------------------------- */
+
+/* Borderless, edge-to-edge card: the grid gap is the only separation, which is
+   what makes the listing read as dense. */
+.product-card--nykaa {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  min-width: 0;
+}
+
+.product-card--nykaa:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.product-card--nykaa .product-card-media {
+  padding: 0;
+  border-bottom: 0;
+  border-radius: var(--radius-sm);
+  background: #f4f4f5;
+  aspect-ratio: 3 / 4;
+}
+
+[data-theme='dark'] .product-card--nykaa .product-card-media {
+  background: #1e1a16;
+}
+
+/* The decorative silk-fold overlay ProductVisual draws is dropped here (as it is
+   for `retail`) — at this card size it competes with the photo. */
+.product-card--nykaa .product-visual,
+.product-card--nykaa .product-visual.has-photo {
+  min-height: 0;
+  border-radius: 0;
+}
+
+.product-card--nykaa .product-visual-label,
+.product-card--nykaa .product-visual-weave,
+.product-card--nykaa .product-visual-fold {
+  display: none;
+}
+
+.product-card--nykaa .product-card-hover-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.product-card--nykaa:hover .product-card-hover-photo {
+  opacity: 1;
+}
+
+.nykaa-rating-pill {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 0 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #14100d; /* fixed white pill in both themes — see .plp-banner-cta */
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: var(--shadow-sm);
+}
+
+.nykaa-rating-pill svg {
+  color: var(--gold);
+}
+
+.nykaa-rating-pill em {
+  color: #827565; /* fixed white pill in both themes — see .plp-banner-cta */
+  font-style: normal;
+  font-weight: 600;
+}
+
+.nykaa-fast {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  min-height: 20px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: var(--ruby);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.product-card--nykaa .product-wish {
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.nykaa-quick-shop {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--ink);
+  color: var(--page);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: var(--transition);
+}
+
+.product-card--nykaa:hover .nykaa-quick-shop {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.nykaa-quick-shop:disabled {
+  background: var(--muted);
+  cursor: not-allowed;
+}
+
+/* Hovering also reveals the rating pill's position — keep them from stacking by
+   hiding the pill only while the quick-shop button occupies the same corner. */
+.product-card--nykaa:hover .nykaa-rating-pill {
+  opacity: 0;
+}
+
+.nykaa-body {
+  padding: 10px 2px 0;
+  gap: 3px;
+}
+
+.nykaa-brand {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: var(--ink);
+}
+
+/* Two-line clamp keeps every card in a grid row the same height regardless of
+   how long the product name is. */
+.nykaa-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.nykaa-price-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.nykaa-price-line strong {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.nykaa-price-line s {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.nykaa-price-line em {
+  color: var(--success);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+@media (hover: none) {
+  /* No hover on touch: pin the quick-shop button open and keep the rating pill,
+     which the hover rules above would otherwise leave permanently hidden/invisible. */
+  .nykaa-quick-shop {
+    opacity: 1;
+    transform: none;
+  }
+
+  .product-card--nykaa:hover .nykaa-rating-pill {
+    opacity: 1;
+  }
+
+  .nykaa-rating-pill {
+    bottom: 52px;
+  }
 }

@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { activePlpChips, clearedPlpState, type PlpFilterState } from '../plpFilters';
+import { FALLBACK_SORTS, activePlpChips, clearedPlpState, type PlpFilterState } from '../plpFilters';
 import type { CatalogFacets } from '@/types';
 
 interface PlpSortBarProps {
@@ -11,15 +11,6 @@ interface PlpSortBarProps {
   liveChip?: { className: string; label: string };
   onChange: (next: PlpFilterState) => void;
 }
-
-export const FALLBACK_SORTS = [
-  { key: 'popularity', label: 'Popularity' },
-  { key: 'price_asc', label: 'Price: Low to High' },
-  { key: 'price_desc', label: 'Price: High to Low' },
-  { key: 'discount', label: 'Biggest Discount' },
-  { key: 'rating', label: 'Customer Rating' },
-  { key: 'newest', label: 'Newest First' },
-];
 
 export function PlpSortBar({ title, total, loading, facets, state, liveChip, onChange }: PlpSortBarProps) {
   const chips = activePlpChips(state);

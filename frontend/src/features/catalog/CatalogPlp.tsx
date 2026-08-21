@@ -8,10 +8,11 @@ import { ProductGridSkeleton } from '@/ui/components';
 import type { CatalogFacets, Product } from '@/types';
 import { ProductCard } from './components/ProductCard';
 import { FilterSidebar } from './components/FilterSidebar';
-import { FALLBACK_SORTS, PlpSortBar } from './components/PlpSortBar';
+import { PlpSortBar } from './components/PlpSortBar';
 import { PlpBanners, type PlpBannerSlide, type PlpCategoryTile } from './components/PlpBanners';
 import {
   ATTRIBUTE_KEYS,
+  FALLBACK_SORTS,
   buildProductQuery,
   clearedPlpState,
   parsePlpParams,
@@ -46,11 +47,24 @@ export function CatalogPlp({ gender, title, slides, tiles }: CatalogPlpProps) {
     [searchParams, knownAttributeKeys],
   );
 
+  // Identifies the exact first-page request the current URL asks for.
+  const queryKey = useMemo(
+    () => JSON.stringify(buildProductQuery(state, { gender, page: 1, perPage: PER_PAGE })),
+    [gender, state],
+  );
+
   const [total, setTotal] = useState<number | null>(null);
   const [pages, setPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Derived, not a setLoading(true) at the top of loadFirstPage: setting state synchronously
+  // inside the effect that runs the load cascades an extra render (react-hooks/set-state-in-effect).
+  // `products` always belongs to exactly one query key, so "the key we last finished loading is not
+  // the key the URL asks for" is precisely the loading condition — including the very first render,
+  // where loadedKey is still null. A live-stock refresh re-runs the same key and so refreshes the
+  // grid in place instead of flashing the skeleton.
+  const loading = loadedKey !== queryKey;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sortSheetOpen, setSortSheetOpen] = useState(false);
   const requestId = useRef(0);
@@ -82,7 +96,6 @@ export function CatalogPlp({ gender, title, slides, tiles }: CatalogPlpProps) {
 
   const loadFirstPage = useCallback(() => {
     const id = ++requestId.current;
-    setLoading(true);
     return api.products
       .list(buildProductQuery(state, { gender, page: 1, perPage: PER_PAGE }))
       .then(data => {
@@ -100,9 +113,9 @@ export function CatalogPlp({ gender, title, slides, tiles }: CatalogPlpProps) {
         setPage(1);
       })
       .finally(() => {
-        if (requestId.current === id) setLoading(false);
+        if (requestId.current === id) setLoadedKey(queryKey);
       });
-  }, [gender, state]);
+  }, [gender, state, queryKey]);
 
   const loadMore = useCallback(() => {
     if (loading || loadingMore || page >= pages) return;

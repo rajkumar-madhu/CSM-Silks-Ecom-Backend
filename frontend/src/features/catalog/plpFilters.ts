@@ -37,7 +37,19 @@ export const DEFAULT_PLP_STATE: PlpFilterState = {
   inStock: true,
 };
 
-const SORT_KEYS = new Set(['popularity', 'price_asc', 'price_desc', 'discount', 'rating', 'newest']);
+// Sort options used when /api/products/facets is unreachable (or hasn't answered yet). Lives here
+// rather than beside PlpSortBar so the component file only exports components (react-refresh), and
+// so the accepted-sort allowlist below can't drift from the options actually offered.
+export const FALLBACK_SORTS = [
+  { key: 'popularity', label: 'Popularity' },
+  { key: 'price_asc', label: 'Price: Low to High' },
+  { key: 'price_desc', label: 'Price: High to Low' },
+  { key: 'discount', label: 'Biggest Discount' },
+  { key: 'rating', label: 'Customer Rating' },
+  { key: 'newest', label: 'Newest First' },
+];
+
+const SORT_KEYS = new Set(FALLBACK_SORTS.map(sort => sort.key));
 
 function cleanNumber(value: string | null): string {
   if (!value) return '';
