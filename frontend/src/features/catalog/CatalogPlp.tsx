@@ -58,6 +58,10 @@ export function CatalogPlp({ gender, title, slides, tiles }: CatalogPlpProps) {
   const [page, setPage] = useState(1);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  // A failed request is NOT "zero matches". Without this, a 429/500/offline collapses into the
+  // empty state, telling the shopper their filters are wrong and offering "Clear all filters" —
+  // an action that cannot possibly help, because the server never answered.
+  const [loadFailed, setLoadFailed] = useState(false);
   // Derived, not a setLoading(true) at the top of loadFirstPage: setting state synchronously
   // inside the effect that runs the load cascades an extra render (react-hooks/set-state-in-effect).
   // `products` always belongs to exactly one query key, so "the key we last finished loading is not
@@ -100,6 +104,7 @@ export function CatalogPlp({ gender, title, slides, tiles }: CatalogPlpProps) {
       .list(buildProductQuery(state, { gender, page: 1, perPage: PER_PAGE }))
       .then(data => {
         if (requestId.current !== id) return;
+        setLoadFailed(false);
         setProducts(data.items);
         setTotal(data.total ?? data.items.length);
         setPages(data.pages ?? 1);
@@ -107,6 +112,7 @@ export function CatalogPlp({ gender, title, slides, tiles }: CatalogPlpProps) {
       })
       .catch(() => {
         if (requestId.current !== id) return;
+        setLoadFailed(true);
         setProducts([]);
         setTotal(0);
         setPages(1);
@@ -194,6 +200,18 @@ export function CatalogPlp({ gender, title, slides, tiles }: CatalogPlpProps) {
 
           {loading ? (
             <ProductGridSkeleton />
+          ) : loadFailed ? (
+            <div className="catalog-empty">
+              <div className="catalog-empty-mark">CSM</div>
+              <h2>We couldn&apos;t load the collection</h2>
+              <p>
+                The catalogue did not respond. Your filters are fine — this is on our side.
+                Please try again in a moment.
+              </p>
+              <button type="button" className="btn btn-primary" onClick={() => void loadFirstPage()}>
+                Try again
+              </button>
+            </div>
           ) : products.length === 0 ? (
             <div className="catalog-empty">
               <div className="catalog-empty-mark">CSM</div>
