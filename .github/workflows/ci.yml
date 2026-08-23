@@ -47,6 +47,11 @@ jobs:
           # DEBUG is unset here, so SECURE_SSL_REDIRECT defaults to `not DEBUG` = True and
           # 301-redirects every test-client request (~18 tests fail with "301 != 200").
           SECURE_SSL_REDIRECT: "false"
+          # Same reason: with DEBUG unset, CHANNEL_LAYER_BACKEND defaults to "redis" and every
+          # test that publishes a realtime update dies on ConnectionError to localhost:6379,
+          # because this job has no redis service (25 errors across cart/orders/payments/
+          # notifications). The in-memory layer exercises the same group_send path.
+          CHANNEL_LAYER_BACKEND: memory
         # Run from backend/. From the repo root, stale __pycache__-only app directories
         # shadow the real apps as namespace packages and the run reports
         # "Found 0 test(s)" with exit 0 — a false green. They are gitignored so a clean

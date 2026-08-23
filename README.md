@@ -48,16 +48,20 @@ Frontend runs on `http://localhost:5173` and proxies `/api` and `/ws` to the Dja
 
 Tests must be run **from `backend/`**. Invoked from the repo root they report `Found 0 test(s)` and exit
 `0` — a false pass, because the stale untracked app dirs at this repo's root shadow the real apps under
-`backend/`. `SECURE_SSL_REDIRECT=false` is also required: it defaults on whenever `DEBUG=False` and
-301-redirects every test-client request, failing ~18 otherwise-unrelated tests with `301 != 200`. CI sets
-both the working directory and the override.
+`backend/`. Two env overrides are also required, both because `DEBUG` is unset:
+`SECURE_SSL_REDIRECT=false` (it defaults on whenever `DEBUG=False` and 301-redirects every test-client
+request, failing ~18 otherwise-unrelated tests with `301 != 200`) and `CHANNEL_LAYER_BACKEND=memory`
+(it defaults to `redis`, so the ~25 tests that publish a realtime update raise
+`redis.exceptions.ConnectionError` unless a redis is listening on `:6379`). CI sets the working
+directory and both overrides.
 
 ```bash
 python backend/manage.py check
 
 cd backend
-SECURE_SSL_REDIRECT=false python manage.py test accounts catalog cart orders payments \
-       inventory loyalty notifications analytics shipping reviews ai csm_backend
+SECURE_SSL_REDIRECT=false CHANNEL_LAYER_BACKEND=memory python manage.py test \
+       accounts catalog cart orders payments inventory loyalty notifications \
+       analytics shipping reviews ai csm_backend            # 180 tests
 
 cd ../frontend && npm run build
 ```
