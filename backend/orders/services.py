@@ -499,7 +499,12 @@ def _refund_order_payment_once(order: Order) -> None:
 def update_return_status(ret: ReturnRequest, *, next_status: str, actor=None) -> ReturnRequest:
     ret = (
         ReturnRequest.objects.select_for_update()
-        .select_related("order", "order__user", "order__payment", "user")
+        # No select_related("order__payment") here: it is the *reverse* side of Payment.order, so
+        # Django renders it as a LEFT OUTER JOIN and Postgres rejects the whole statement with
+        # "FOR UPDATE cannot be applied to the nullable side of an outer join". SQLite ignores
+        # SELECT ... FOR UPDATE entirely, so this only ever fails on the database production
+        # actually runs. The payment is read lazily below, inside the same transaction.
+        .select_related("order", "order__user", "user")
         .prefetch_related("order__items__product", "order__items__variant", "order__items__variant__product")
         .get(id=ret.id)
     )
@@ -560,7 +565,12 @@ def update_return_status(ret: ReturnRequest, *, next_status: str, actor=None) ->
 def cancel_order(order: Order, *, actor=None, note: str = "", location: str = "") -> Order:
     order = (
         Order.objects.select_for_update()
-        .select_related("user", "payment")
+        # No select_related("payment") here: it is the *reverse* side of Payment.order, so
+        # Django renders it as a LEFT OUTER JOIN and Postgres rejects the whole statement with
+        # "FOR UPDATE cannot be applied to the nullable side of an outer join". SQLite ignores
+        # SELECT ... FOR UPDATE entirely, so this only ever fails on the database production
+        # actually runs. The payment is read lazily below, inside the same transaction.
+        .select_related("user")
         .prefetch_related("items__product", "items__variant", "items__variant__product")
         .get(id=order.id)
     )
@@ -701,7 +711,12 @@ def _auto_refund_overcapture(order: Order) -> None:
 def recover_cancelled_paid_order(order: Order) -> Order:
     order = (
         Order.objects.select_for_update()
-        .select_related("user", "payment")
+        # No select_related("payment") here: it is the *reverse* side of Payment.order, so
+        # Django renders it as a LEFT OUTER JOIN and Postgres rejects the whole statement with
+        # "FOR UPDATE cannot be applied to the nullable side of an outer join". SQLite ignores
+        # SELECT ... FOR UPDATE entirely, so this only ever fails on the database production
+        # actually runs. The payment is read lazily below, inside the same transaction.
+        .select_related("user")
         .prefetch_related("items__product", "items__variant", "items__variant__product")
         .get(id=order.id)
     )
@@ -758,7 +773,12 @@ def capture_razorpay_payment(
     payment = Payment.objects.select_for_update().select_related("order", "order__user").get(pk=payment.pk)
     order = (
         Order.objects.select_for_update()
-        .select_related("user", "payment")
+        # No select_related("payment") here: it is the *reverse* side of Payment.order, so
+        # Django renders it as a LEFT OUTER JOIN and Postgres rejects the whole statement with
+        # "FOR UPDATE cannot be applied to the nullable side of an outer join". SQLite ignores
+        # SELECT ... FOR UPDATE entirely, so this only ever fails on the database production
+        # actually runs. The payment is read lazily below, inside the same transaction.
+        .select_related("user")
         .prefetch_related("items__variant", "items__variant__product")
         .get(id=payment.order_id)
     )
