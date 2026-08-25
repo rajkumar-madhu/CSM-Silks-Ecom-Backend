@@ -155,6 +155,23 @@ def database_config() -> dict:
         }
     if IS_PRODUCTION:
         raise ValueError("Production must use PostgreSQL, not SQLite. Set DATABASE_URL to a postgres:// URL")
+    if parsed.scheme == "sqlite":
+        # Honour the path the URL actually names. This used to fall through to the
+        # hardcoded dev database below, so pointing a command at a scratch file
+        # (DATABASE_URL=sqlite:////tmp/scratch.db) silently ran against the real one
+        # instead — which cost two accidental reverse-migrations of
+        # csm_silks_django.db while rehearsing a destructive migration.
+        # Path convention follows SQLAlchemy: one leading slash is the separator, so
+        # sqlite:///rel.db is relative to PROJECT_ROOT and sqlite:////abs.db is absolute.
+        name = ":memory:" if parsed.netloc == ":memory:" else parsed.path[1:]
+        if not name:
+            name = str(PROJECT_ROOT / "csm_silks_django.db")
+        elif name != ":memory:" and not name.startswith("/"):
+            name = str(PROJECT_ROOT / name)
+        return {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": name,
+        }
     return {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": str(PROJECT_ROOT / "csm_silks_django.db"),
