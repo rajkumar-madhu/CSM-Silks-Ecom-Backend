@@ -112,7 +112,7 @@ class OccasionListView(APIView):
         products = public_products(request.query_params)
         counts: Counter = Counter()
         spellings: dict[str, Counter] = defaultdict(Counter)
-        images: dict[str, str] = {}
+        candidates: dict[str, list[str]] = defaultdict(list)
         for product in products.distinct():
             image = next((img.image_url for img in product.images.all() if img.image_url), "")
             for raw in product.occasions or []:
@@ -123,7 +123,7 @@ class OccasionListView(APIView):
                 counts[key] += 1
                 spellings[key][name] += 1
                 if image:
-                    images.setdefault(key, image)
+                    candidates[key].append(image)
         def best_spelling(key: str) -> str:
             """Pick the label a shopper should see when the data disagrees with itself.
 
@@ -137,11 +137,7 @@ class OccasionListView(APIView):
             )[0]
 
         rows = [
-            {
-                "name": best_spelling(key),
-                "count": count,
-                "image": images.get(key, ""),
-            }
+            {"key": key, "name": best_spelling(key), "count": count}
             for key, count in counts.items()
         ]
         # Busiest first: an occasion row is merchandising, so lead with what is actually
@@ -150,6 +146,21 @@ class OccasionListView(APIView):
         limit = request.query_params.get("limit")
         if limit and limit.isdigit():
             rows = rows[: int(limit)]
+        # Give each card its own photograph where the inventory allows it. One product can
+        # carry several occasions, so taking each occasion's first candidate hands the same
+        # image to three cards in a row and the rail reads as a mistake. Assign greedily in
+        # display order, preferring an unused picture and falling back to a repeat only when
+        # an occasion has nothing else to show.
+        used: set[str] = set()
+        for row in rows:
+            options = candidates.get(row["key"], [])
+            chosen = next((url for url in options if url not in used), "")
+            if not chosen and options:
+                chosen = options[0]
+            if chosen:
+                used.add(chosen)
+            row["image"] = chosen
+            del row["key"]
         return Response(rows)
 
 

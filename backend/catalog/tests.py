@@ -1207,3 +1207,10 @@ class OccasionListTests(TestCase):
     def test_limit_trims_the_row(self):
         rows = self.client.get("/api/occasions", {"gender": "women", "limit": "1"}).json()
         self.assertEqual(len(rows), 1)
+
+    def test_cards_do_not_all_share_one_photograph(self):
+        # One product can carry several occasions, so a naive "first image wins" hands the
+        # same picture to three cards in a row and the rail reads as a mistake.
+        rows = self.client.get("/api/occasions", {"gender": "women"}).json()
+        images = [row["image"] for row in rows if row["image"]]
+        self.assertEqual(len(images), len(set(images)), f"duplicate photography across cards: {images}")

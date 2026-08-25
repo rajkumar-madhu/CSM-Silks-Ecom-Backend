@@ -3837,7 +3837,9 @@
    quiet supporting text. Deliberately no price and no discount — this row sells the
    occasion, not a markdown. */
 .occasion-rail {
-  padding: 64px 0 8px;
+  /* 48px matches the horizontal inset the neighbouring homepage sections use; the row is
+     full-bleed like its siblings and pads itself. */
+  padding: 64px 48px 8px;
 }
 .occasion-rail-head {
   text-align: center;
@@ -3919,7 +3921,7 @@
 }
 @media (max-width: 860px) {
   .occasion-rail {
-    padding: 40px 0 4px;
+    padding: 40px 20px 4px;
   }
   /* Two up rather than five slivers; the fifth card wraps and that is fine. */
   .occasion-rail-grid {
