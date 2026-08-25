@@ -2,6 +2,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -1106,3 +1107,50 @@ class ColourFacetGroupingTests(TestCase):
         rows = self.client.get("/api/catalog/facets", {"gender": "women"}).json()["colors"]
         ruby = next(row for row in rows if row["color_name"] == "Ruby")
         self.assertEqual(ruby["color_hex"], "#9F1E34")
+
+
+class PublicCatalogThrottleTests(TestCase):
+    """Browsing the catalogue must not consume the shared anon bucket.
+
+    Behind this ingress every anonymous visitor shares one throttle identity, so an
+    "anon" bucket sized for a single client is really sized for the whole internet.
+    Ordinary shopping (2+ API calls per page view) was draining it and 429'ing real
+    customers while the SPA shell still served — the site looked up, the store looked
+    empty. These views therefore use the far looser `catalog` scope instead.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
+    def test_public_read_views_are_off_the_anon_bucket_entirely(self):
+        # The mechanism, asserted directly: these views REPLACE the default throttle classes
+        # rather than adding a scope alongside them. Setting only `throttle_scope` would leave
+        # AnonRateThrottle attached and the shared bucket would still drain.
+        from rest_framework.throttling import AnonRateThrottle
+
+        from catalog.views import (
+            CatalogFacetsView,
+            CategoryListView,
+            CollectionListView,
+            ProductDetailView,
+            ProductListView,
+        )
+
+        for view in (
+            ProductListView,
+            ProductDetailView,
+            CategoryListView,
+            CollectionListView,
+            CatalogFacetsView,
+        ):
+            classes = view().get_throttles()
+            self.assertTrue(classes, f"{view.__name__} has no throttle at all")
+            self.assertFalse(
+                any(isinstance(t, AnonRateThrottle) for t in classes),
+                f"{view.__name__} still drains the shared anon bucket",
+            )
+            self.assertEqual([t.scope for t in classes], ["catalog"])

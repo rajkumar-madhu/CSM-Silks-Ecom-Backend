@@ -12,6 +12,7 @@ from django.utils import timezone
 from rest_framework import status
 from accounts.permissions import IsStaffAdmin
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .models import AttributeOption, Category, Collection, Product, ProductImage, ProductVariant, StockAlert
@@ -40,7 +41,20 @@ from .serializers import (
 )
 
 
+class PublicCatalogThrottle(ScopedRateThrottle):
+    """Throttle for public, read-only catalogue browsing.
+
+    Replaces the default anon/user throttles on these views rather than adding to them:
+    behind this ingress every anonymous visitor shares one throttle identity, so the
+    global "anon" bucket was being drained by ordinary shopping (2+ calls per page view)
+    and 429'd real customers. See DEFAULT_THROTTLE_RATES["catalog"] for the reasoning.
+    """
+
+    scope = "catalog"
+
+
 class ProductListView(APIView):
+    throttle_classes = [PublicCatalogThrottle]
     def get(self, request):
         page = max(int(request.query_params.get("page", 1)), 1)
         per_page = min(max(int(request.query_params.get("per_page", 12)), 1), 48)
@@ -59,18 +73,21 @@ class ProductListView(APIView):
 
 
 class ProductDetailView(APIView):
+    throttle_classes = [PublicCatalogThrottle]
     def get(self, request, slug: str):
         product = get_object_or_404(product_base_queryset().filter(is_active=True), slug=slug)
         return Response(ProductDetailSerializer(product).data)
 
 
 class CategoryListView(APIView):
+    throttle_classes = [PublicCatalogThrottle]
     def get(self, request):
         categories = Category.objects.filter(is_active=True).order_by("sort_order", "name")
         return Response(CategorySerializer(categories, many=True).data)
 
 
 class CollectionListView(APIView):
+    throttle_classes = [PublicCatalogThrottle]
     def get(self, request):
         collections = Collection.objects.order_by("sort_order", "name")
         return Response(CollectionSerializer(collections, many=True).data)
@@ -122,6 +139,7 @@ def _attribute_groups(params) -> list[dict]:
 
 
 class CatalogFacetsView(APIView):
+    throttle_classes = [PublicCatalogThrottle]
     def get(self, request):
         products = public_products(request.query_params)
         variants = ProductVariant.objects.filter(product__in=products, is_active=True)

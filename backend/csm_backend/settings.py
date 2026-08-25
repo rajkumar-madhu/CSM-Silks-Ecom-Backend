@@ -269,6 +269,18 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_THROTTLE_RATES": {
         "anon": os.getenv("DRF_ANON_THROTTLE", "100/hour" if IS_PRODUCTION else "500/hour"),
+        # Public, read-only catalogue browsing (products, detail, categories, collections,
+        # facets). Deliberately far looser than "anon", because behind this cluster's ingress
+        # every anonymous visitor shares ONE throttle identity — X-Forwarded-For is the docker
+        # gateway for all external traffic — so an "anon" bucket sized for one client is really
+        # sized for the entire internet. A storefront page view costs 2+ calls, so a handful of
+        # shoppers browsing was enough to 429 the whole site while the SPA shell still served,
+        # making it look up while showing an empty store. Throttling here protects nothing
+        # anyway: no credentials to brute-force, no writes, no per-request cost worth rationing.
+        # The strict scopes below (otp, admin_login, payment, checkout) are where throttling
+        # actually earns its keep — keep those tight. Revisit this once ingress sees real client
+        # IPs (use-forwarded-headers + NUM_PROXIES), which is the real fix.
+        "catalog": os.getenv("DRF_CATALOG_THROTTLE", "20000/hour"),
         "user": os.getenv("DRF_USER_THROTTLE", "1000/hour" if IS_PRODUCTION else "5000/hour"),
         "otp": os.getenv("DRF_OTP_THROTTLE", "3/minute" if IS_PRODUCTION else "120/minute"),
         "admin_login": os.getenv("DRF_ADMIN_LOGIN_THROTTLE", "5/minute" if IS_PRODUCTION else "10/minute"),
