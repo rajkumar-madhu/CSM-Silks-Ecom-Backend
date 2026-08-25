@@ -1054,3 +1054,55 @@ class ProductDetailAttributeTests(TestCase):
         # specifications itself is an unfiltered passthrough — the dedup happens client-side
         # against attribute_labels, so this pins the full tail is still there to dedup against.
         self.assertEqual(data["specifications"], specs)
+
+
+class ColourFacetGroupingTests(TestCase):
+    """One colour name must be one sidebar row, whatever the variants say about hex.
+
+    The facet used to group by (color_name, color_hex), so a name carried at three
+    different hexes rendered three rows of (1) each — while clicking any of them
+    filtered on color_name and returned all three products. The count has to
+    describe what the click actually does.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        category = Category.objects.create(
+            name="Bridal", slug="bridal-colour-test", gender="women", product_type="saree"
+        )
+        # Three products all called "Ruby", disagreeing on hex; two share one value so
+        # the representative swatch has a clear majority.
+        for index, hex_value in enumerate(("#9F1E34", "#9F1E34", "#6d1c2b")):
+            product = Product.objects.create(
+                name=f"Ruby Saree {index}",
+                slug=f"ruby-saree-{index}",
+                category=category,
+                gender="women",
+                base_price=100,
+                base_mrp=200,
+            )
+            ProductVariant.objects.create(
+                product=product,
+                sku=f"RUBY-{index}",
+                price=100,
+                mrp=200,
+                stock_qty=4,
+                color_name="Ruby",
+                color_hex=hex_value,
+            )
+
+    def test_one_row_per_colour_name(self):
+        rows = self.client.get("/api/catalog/facets", {"gender": "women"}).json()["colors"]
+        ruby = [row for row in rows if row["color_name"] == "Ruby"]
+        self.assertEqual(len(ruby), 1)
+
+    def test_count_matches_what_filtering_by_that_colour_returns(self):
+        rows = self.client.get("/api/catalog/facets", {"gender": "women"}).json()["colors"]
+        ruby = next(row for row in rows if row["color_name"] == "Ruby")
+        filtered = self.client.get("/api/products", {"gender": "women", "color": "Ruby"}).json()
+        self.assertEqual(ruby["count"], filtered["total"])
+
+    def test_representative_swatch_is_the_majority_hex(self):
+        rows = self.client.get("/api/catalog/facets", {"gender": "women"}).json()["colors"]
+        ruby = next(row for row in rows if row["color_name"] == "Ruby")
+        self.assertEqual(ruby["color_hex"], "#9F1E34")

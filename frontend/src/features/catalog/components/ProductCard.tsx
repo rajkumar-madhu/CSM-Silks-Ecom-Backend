@@ -12,6 +12,9 @@ interface ProductCardProps {
   layout?: 'default' | 'retail' | 'nykaa';
 }
 
+// Low enough that the badge is a genuine "only a few left" signal rather than decoration.
+const LOW_STOCK_BADGE_THRESHOLD = 3;
+
 function colorNames(product: Product) {
   const fromVariants = (product.variants || [])
     .map(variant => variant.color_name?.trim())
@@ -32,7 +35,11 @@ export function ProductCard({ product, layout = 'default' }: ProductCardProps) {
   const deliveryDays = `${product.delivery_min_days || 2}-${product.delivery_max_days || 6}`;
   const href = productDetailPath(product);
   const secondaryImage = resolveAssetUrl(product.images?.[1]);
-  const sellingFast = Boolean(product.deal_label) || stock > 0 && stock <= 8;
+  // Scarcity comes from stock alone. `deal_label` used to trigger this too, but it holds
+  // merchandising copy ("Festive Price Drop", "Bank Offer Eligible", "Rare Weave") that says
+  // nothing about how fast a saree is moving — and every product carries one, so the badge
+  // showed on 100% of the catalogue and meant nothing.
+  const sellingFast = stock > 0 && stock <= LOW_STOCK_BADGE_THRESHOLD;
   const colors = colorNames(product);
   const swatches = (product.colors || []).slice(0, 4);
 

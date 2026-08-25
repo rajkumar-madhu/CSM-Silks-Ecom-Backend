@@ -126,12 +126,33 @@ class CatalogFacetsView(APIView):
         products = public_products(request.query_params)
         variants = ProductVariant.objects.filter(product__in=products, is_active=True)
         price_bounds = variants.aggregate(min_price=Min("price"), max_price=Max("price"))
-        colors = (
+        # Group by NAME only, not (name, hex). The sidebar filters on color_name
+        # (selectors.py matches color_name__icontains), so grouping by the pair split
+        # one colour across several rows whenever variants disagreed on the hex —
+        # "Ruby" rendered three times as (1) while clicking any of them returned all
+        # three products. The count has to describe what the click actually does.
+        color_rows = (
             variants.exclude(color_name="")
-            .values("color_name", "color_hex")
+            .values("color_name")
             .annotate(count=Count("product_id", distinct=True))
             .order_by("color_name")
         )
+        # One representative swatch per name: the hex most variants use, so a stray
+        # value on a single SKU cannot hijack the swatch for the whole colour.
+        hex_by_name: dict[str, str] = {}
+        hex_votes: dict[tuple[str, str], int] = Counter()
+        for row in variants.exclude(color_name="").exclude(color_hex="").values("color_name", "color_hex"):
+            hex_votes[(row["color_name"], row["color_hex"])] += 1
+        for (name, value), votes in sorted(hex_votes.items(), key=lambda item: (-item[1], item[0][1])):
+            hex_by_name.setdefault(name, value)
+        colors = [
+            {
+                "color_name": row["color_name"],
+                "color_hex": hex_by_name.get(row["color_name"], ""),
+                "count": row["count"],
+            }
+            for row in color_rows
+        ]
         fabric_counts = (
             products.exclude(fabric__isnull=True)
             # Same is_filterable/is_active gate as _attribute_groups below — otherwise a
@@ -156,7 +177,7 @@ class CatalogFacetsView(APIView):
         return Response(
             {
                 "categories": CategorySerializer(Category.objects.filter(is_active=True), many=True).data,
-                "colors": list(colors),
+                "colors": colors,
                 "fabrics": [row["fabric__label"] for row in fabric_counts],
                 "occasions": sorted(occasion_counter),
                 "price": price_bounds,
