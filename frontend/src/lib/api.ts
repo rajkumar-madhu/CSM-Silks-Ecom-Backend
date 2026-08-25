@@ -11,6 +11,7 @@ import type {
   CatalogCategory,
   CatalogCollection,
   CatalogFacets,
+  CatalogOccasion,
   DeliveryCheck,
   AppNotification,
   LoyaltyReward,
@@ -306,6 +307,14 @@ export const api = {
     },
     categories: () => request<CatalogCategory[]>('/categories'),
     collections: () => request<CatalogCollection[]>('/collections'),
+    occasions: (params?: Record<string, string | number | undefined>) => {
+      const query = new URLSearchParams();
+      Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') query.set(key, String(value));
+      });
+      const suffix = query.toString();
+      return request<CatalogOccasion[]>(`/occasions${suffix ? `?${suffix}` : ''}`);
+    },
     delivery: (slug: string, pin_code: string) =>
       request<DeliveryCheck>(`/products/${slug}/delivery?pin_code=${encodeURIComponent(pin_code)}`),
     stockAlert: (slug: string, data: { phone: string; email?: string; variant_id?: number }) =>

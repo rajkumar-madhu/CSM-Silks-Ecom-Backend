@@ -14,6 +14,7 @@ from .views import (
     CatalogFacetsView,
     CategoryListView,
     CollectionListView,
+    OccasionListView,
     ProductDeliveryCheckView,
     ProductDetailView,
     ProductListView,
@@ -23,6 +24,7 @@ from .views import (
 urlpatterns = [
     path("categories", CategoryListView.as_view()),
     path("collections", CollectionListView.as_view()),
+    path("occasions", OccasionListView.as_view()),
     path("catalog/facets", CatalogFacetsView.as_view()),
     path("products", ProductListView.as_view()),
     path("search", ProductListView.as_view()),

@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 
 from inventory.models import StockLedger
 
-from .models import AttributeOption, Category, Product, ProductVariant, StockAlert
+from .models import AttributeOption, Category, Product, ProductImage, ProductVariant, StockAlert
 from .tasks import notify_restocked_watchers
 
 User = get_user_model()
@@ -1154,3 +1154,56 @@ class PublicCatalogThrottleTests(TestCase):
                 f"{view.__name__} still drains the shared anon bucket",
             )
             self.assertEqual([t.scope for t in classes], ["catalog"])
+
+
+class OccasionListTests(TestCase):
+    """The occasion row is merchandising, so it must reflect real, buyable inventory."""
+
+    def setUp(self):
+        self.client = APIClient()
+        category = Category.objects.create(
+            name="Bridal", slug="bridal-occ", gender="women", product_type="saree"
+        )
+        def make(slug, occasions, image=""):
+            product = Product.objects.create(
+                name=slug, slug=slug, category=category, gender="women",
+                base_price=100, base_mrp=200, occasions=occasions,
+            )
+            ProductVariant.objects.create(
+                product=product, sku=f"OCC-{slug}", price=100, mrp=200, stock_qty=3
+            )
+            if image:
+                ProductImage.objects.create(product=product, image_url=image, sort_order=0)
+            return product
+
+        make("a", ["Wedding", "Festival"], "https://img.test/a.jpg")
+        make("b", ["Wedding"], "https://img.test/b.jpg")
+        make("c", ["wedding"])          # casing drift — must fold into the same card
+        make("d", ["  Festival  "])     # whitespace drift
+        make("e", [""])                 # empty value must not become a card
+
+    def test_one_card_per_occasion_regardless_of_casing_or_whitespace(self):
+        rows = self.client.get("/api/occasions", {"gender": "women"}).json()
+        names = [row["name"] for row in rows]
+        self.assertEqual(len(names), len(set(name.casefold() for name in names)))
+        self.assertIn("Wedding", names)
+        self.assertIn("Festival", names)
+
+    def test_counts_reflect_every_spelling(self):
+        rows = {row["name"].casefold(): row["count"] for row in self.client.get(
+            "/api/occasions", {"gender": "women"}).json()}
+        self.assertEqual(rows["wedding"], 3)   # a, b and the lowercase c
+        self.assertEqual(rows["festival"], 2)  # a and the padded d
+
+    def test_blank_occasions_never_become_cards(self):
+        names = [row["name"] for row in self.client.get("/api/occasions", {"gender": "women"}).json()]
+        self.assertNotIn("", names)
+
+    def test_busiest_occasion_leads_and_carries_a_photograph(self):
+        rows = self.client.get("/api/occasions", {"gender": "women"}).json()
+        self.assertEqual(rows[0]["name"].casefold(), "wedding")
+        self.assertTrue(rows[0]["image"], "the leading card has no photograph to show")
+
+    def test_limit_trims_the_row(self):
+        rows = self.client.get("/api/occasions", {"gender": "women", "limit": "1"}).json()
+        self.assertEqual(len(rows), 1)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import timedelta
 from math import ceil
 
@@ -91,6 +91,66 @@ class CollectionListView(APIView):
     def get(self, request):
         collections = Collection.objects.order_by("sort_order", "name")
         return Response(CollectionSerializer(collections, many=True).data)
+
+
+class OccasionListView(APIView):
+    """Occasion-led discovery for the storefront ("shop for Wedding / Festival / Pooja").
+
+    Built from live inventory rather than a hardcoded list, so a row of occasion cards
+    cannot drift from what is actually buyable: each entry carries its real product count
+    and a photograph borrowed from one of its own products.
+
+    Occasions are still free text on Product.occasions, which has fragmented before
+    ("Festival" vs "Festive", "Office" vs "OFFICE"). Values are folded case-insensitively
+    here so one occasion is one card even if the data drifts again — but the durable fix is
+    the same controlled vocabulary the saree attributes use.
+    """
+
+    throttle_classes = [PublicCatalogThrottle]
+
+    def get(self, request):
+        products = public_products(request.query_params)
+        counts: Counter = Counter()
+        spellings: dict[str, Counter] = defaultdict(Counter)
+        images: dict[str, str] = {}
+        for product in products.distinct():
+            image = next((img.image_url for img in product.images.all() if img.image_url), "")
+            for raw in product.occasions or []:
+                name = (raw or "").strip()
+                if not name:
+                    continue
+                key = name.casefold()
+                counts[key] += 1
+                spellings[key][name] += 1
+                if image:
+                    images.setdefault(key, image)
+        def best_spelling(key: str) -> str:
+            """Pick the label a shopper should see when the data disagrees with itself.
+
+            Majority wins; ties prefer a properly-cased spelling, so "Wedding" beats
+            "wedding" and "OFFICE" never becomes the card title just because it was
+            written first.
+            """
+            return max(
+                spellings[key].items(),
+                key=lambda item: (item[1], item[0].istitle(), item[0]),
+            )[0]
+
+        rows = [
+            {
+                "name": best_spelling(key),
+                "count": count,
+                "image": images.get(key, ""),
+            }
+            for key, count in counts.items()
+        ]
+        # Busiest first: an occasion row is merchandising, so lead with what is actually
+        # in stock. Ties break alphabetically to keep the order stable between requests.
+        rows.sort(key=lambda row: (-row["count"], row["name"]))
+        limit = request.query_params.get("limit")
+        if limit and limit.isdigit():
+            rows = rows[: int(limit)]
+        return Response(rows)
 
 
 def _attribute_groups(params) -> list[dict]:

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowRight, ChevronLeft, ChevronRight, MapPin, MessageCircle, ShieldCheck, Star, Store, Truck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ProductCard } from '@/features/catalog/components/ProductCard';
+import { OccasionRail } from '@/features/catalog/components/OccasionRail';
 import { api } from '@/lib/api';
 import type { Product } from '@/types';
 
@@ -269,6 +270,8 @@ export function Home() {
           </button>
         ))}
       </section>
+
+      <OccasionRail />
 
       <section className="su-categories">
         <div className="su-categories-head">

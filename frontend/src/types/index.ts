@@ -427,6 +427,12 @@ export interface CatalogAttributeGroup {
   options: CatalogAttributeOption[];
 }
 
+export interface CatalogOccasion {
+  name: string;
+  count: number;
+  image: string;
+}
+
 export interface CatalogFacets {
   categories: CatalogCategory[];
   colors: Array<{ color_name: string; color_hex: string; count?: number }>;

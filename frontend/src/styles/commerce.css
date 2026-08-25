@@ -3831,3 +3831,99 @@
   background: linear-gradient(135deg, var(--ink-3), var(--surface-2));
   border-color: var(--line);
 }
+
+/* --- Shop by occasion -------------------------------------------------------------
+   Kalyan-style occasion cards: photography first, a single word over it, the count as
+   quiet supporting text. Deliberately no price and no discount — this row sells the
+   occasion, not a markdown. */
+.occasion-rail {
+  padding: 64px 0 8px;
+}
+.occasion-rail-head {
+  text-align: center;
+  margin-bottom: 28px;
+}
+.occasion-rail-kicker {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  letter-spacing: 1.4px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+.occasion-rail-head h2 {
+  font-family: var(--font-display, Georgia, serif);
+  font-size: clamp(24px, 3.2vw, 38px);
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  line-height: 1.15;
+  margin: 0;
+}
+.occasion-rail-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.occasion-card {
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius, 10px);
+  color: #fff;
+  display: block;
+  overflow: hidden;
+  position: relative;
+  text-decoration: none;
+}
+.occasion-card img,
+.occasion-card-fallback {
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  transition: transform 600ms ease;
+  width: 100%;
+}
+.occasion-card-fallback {
+  background: linear-gradient(150deg, var(--gold, #b37e28), var(--ink, #14100d));
+}
+.occasion-card:hover img {
+  transform: scale(1.04);
+}
+/* The shade is what keeps the word legible over an unpredictable photograph. */
+.occasion-card-shade {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.12) 52%, transparent 100%);
+  inset: 0;
+  position: absolute;
+}
+.occasion-card-body {
+  bottom: 0;
+  display: block;
+  left: 0;
+  padding: 18px 16px;
+  position: absolute;
+  right: 0;
+}
+.occasion-card-body strong {
+  display: block;
+  font-family: var(--font-display, Georgia, serif);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.occasion-card-body em {
+  display: block;
+  font-size: 12px;
+  font-style: normal;
+  letter-spacing: 0.4px;
+  margin-top: 4px;
+  opacity: 0.82;
+}
+@media (max-width: 860px) {
+  .occasion-rail {
+    padding: 40px 0 4px;
+  }
+  /* Two up rather than five slivers; the fifth card wraps and that is fine. */
+  .occasion-rail-grid {
+    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
