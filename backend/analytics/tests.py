@@ -101,6 +101,38 @@ class AdminAnalyticsApiTests(TestCase):
         self.assertEqual(money(kpis["revenue_today"]), Decimal("60.00"))
         self.assertEqual(kpis["refunded_orders_today"], 1)
 
+    def test_dashboard_exposes_actionable_counts_for_console_sidebar_badges(self):
+        """The sidebar badges are a call to act, so they must count only rows a human can
+        still move — a delivered order or a refunded return has nothing left to do."""
+        self.create_order_with_payment(
+            number="CSM-AN-BADGE-PACKED",
+            amount=Decimal("100.00"),
+            order_status=Order.Status.PACKED,
+            payment_status=Payment.Status.CAPTURED,
+        )
+        self.create_order_with_payment(
+            number="CSM-AN-BADGE-CONFIRMED",
+            amount=Decimal("100.00"),
+            order_status=Order.Status.CONFIRMED,
+            payment_status=Payment.Status.CAPTURED,
+        )
+        settled = self.create_order_with_payment(
+            number="CSM-AN-BADGE-DELIVERED",
+            amount=Decimal("100.00"),
+            order_status=Order.Status.DELIVERED,
+            payment_status=Payment.Status.CAPTURED,
+        )
+        ReturnRequest.objects.create(order=settled, user=self.customer, reason="Damaged", status=ReturnRequest.Status.REQUESTED)
+        ReturnRequest.objects.create(order=settled, user=self.customer, reason="Colour", status=ReturnRequest.Status.REFUNDED)
+
+        response = self.client.get("/api/admin/dashboard")
+
+        self.assertEqual(response.status_code, 200)
+        kpis = response.json()["kpis"]
+        self.assertEqual(kpis["open_orders"], 2)
+        self.assertEqual(kpis["open_returns"], 1)
+        self.assertEqual(kpis["unpublished_reviews"], 0)
+
     def test_reports_include_net_gross_refunds_and_return_rate(self):
         paid = self.create_order_with_payment(
             number="CSM-AN-REPORT-PAID",

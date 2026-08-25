@@ -50,3 +50,6 @@ current-login-state.md
 *.swo
 .DS_Store
 Thumbs.db
+
+# Runtime log directory (the *.log files inside are already ignored)
+backend/logs/

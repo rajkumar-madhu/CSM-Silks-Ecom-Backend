@@ -14,6 +14,7 @@ from catalog.models import Product
 from inventory.models import UnsoldAlert
 from orders.models import Order, OrderItem, ReturnRequest
 from payments.models import Payment
+from reviews.models import ProductReview
 
 from .models import AdminAuditLog
 from .serializers import AdminAuditLogSerializer
@@ -203,6 +204,23 @@ class AdminInsightsView(APIView):
         )
 
 
+# Statuses that still need a human on the floor. These back the console sidebar badges, so
+# keep them aligned with the workflow actions the Orders / Returns / Reviews screens offer:
+# a badge counting rows nobody can act on is worse than no badge at all.
+ACTIONABLE_ORDER_STATUSES = (
+    Order.Status.PENDING,
+    Order.Status.PAYMENT_PENDING,
+    Order.Status.CONFIRMED,
+    Order.Status.QUALITY_CHECK,
+    Order.Status.PACKED,
+)
+OPEN_RETURN_STATUSES = (
+    ReturnRequest.Status.REQUESTED,
+    ReturnRequest.Status.APPROVED,
+    ReturnRequest.Status.PICKED_UP,
+)
+
+
 class AdminDashboardView(APIView):
     permission_classes = [IsStaffAdmin]
 
@@ -243,6 +261,9 @@ class AdminDashboardView(APIView):
                     "tryon_sessions_today": TryOnSession.objects.filter(created_at__date=today).count(),
                     "low_stock_products": low_stock,
                     "unsold_alerts": unsold.count(),
+                    "open_orders": Order.objects.filter(status__in=ACTIONABLE_ORDER_STATUSES).count(),
+                    "open_returns": ReturnRequest.objects.filter(status__in=OPEN_RETURN_STATUSES).count(),
+                    "unpublished_reviews": ProductReview.objects.filter(is_published=False).count(),
                     "capital_blocked": unsold.aggregate(total=Sum("capital_blocked"))["total"] or 0,
                     "top_product": top or {},
                 },

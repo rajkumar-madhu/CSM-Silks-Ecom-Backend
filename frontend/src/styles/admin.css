@@ -16,6 +16,13 @@
   --admin-line: #e6dccb;
   --admin-text: #1a1208;
   --admin-muted: #7a6d5c;
+  --admin-rail-w: 76px;
+  --admin-sidebar-w: 248px;
+  --admin-nav-w: var(--admin-sidebar-w);
+}
+
+.admin-shell.is-railed {
+  --admin-nav-w: var(--admin-rail-w);
 }
 
 .admin-login-card {
@@ -503,9 +510,10 @@
 }
 
 .admin-sidebar {
-  width: 248px;
+  width: var(--admin-nav-w);
   flex: 0 0 auto;
   height: 100vh;
+  height: 100dvh;
   padding: 22px 12px;
   border-right: 1px solid rgba(223, 175, 83, 0.14);
   background:
@@ -515,6 +523,61 @@
   display: flex;
   flex-direction: column;
   box-shadow: 8px 0 30px rgba(26, 18, 8, 0.18);
+  transition: width 200ms ease, transform 220ms ease;
+}
+
+/* Railed: icons only. Labels are removed from flow rather than hidden so the 28px icon
+   tile can centre in the narrow column, and every control keeps a title tooltip. */
+.admin-shell.is-railed .admin-sidebar {
+  padding-inline: 10px;
+}
+
+.admin-shell.is-railed .nav-item-label,
+.admin-shell.is-railed .admin-tag,
+.admin-shell.is-railed .admin-version,
+.admin-shell.is-railed .nav-group {
+  display: none;
+}
+
+.admin-shell.is-railed .admin-logo {
+  justify-items: center;
+  padding: 0 0 18px;
+}
+
+.admin-shell.is-railed .admin-mark {
+  font-size: 26px;
+}
+
+.admin-shell.is-railed .nav-item-btn,
+.admin-shell.is-railed .admin-logout-btn,
+.admin-shell.is-railed .admin-rail-btn {
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+}
+
+.admin-shell.is-railed .nav-section + .nav-section {
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+/* In the rail there is no room for a number, so the badge degrades to a corner dot that
+   still says "this section wants you" without claiming a specific count. */
+.admin-shell.is-railed .admin-nav-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  min-width: 9px;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0;
+  line-height: 0;
+}
+
+.admin-shell.is-railed .admin-nav-badge > span[aria-hidden='true'] {
+  display: none;
 }
 
 .admin-logo {
@@ -589,12 +652,21 @@
   text-transform: uppercase;
 }
 
+.nav-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .nav-item {
   border-radius: 12px;
   transition: var(--transition-fast);
 }
 
 .nav-item-btn {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -610,6 +682,58 @@
   cursor: pointer;
   text-align: left;
   transition: var(--transition-fast);
+}
+
+.nav-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Keyboard focus has to be visible against the dark column; the light ring is deliberately
+   not the gold used for the active state, so "focused" and "current" stay distinguishable. */
+.admin-sidebar button:focus-visible,
+.admin-nav-toggle:focus-visible {
+  outline: 2px solid rgba(255, 248, 234, 0.85);
+  outline-offset: 2px;
+}
+
+/* Prefixed deliberately: layout.css already owns a `.nav-badge` for the storefront navbar's
+   cart count, and it is absolutely positioned at top/right -6px. Sharing the name pulled the
+   sidebar counts out of their rows and past the sidebar edge. */
+.admin-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.admin-nav-badge-warn {
+  background: rgba(223, 175, 83, 0.22);
+  color: #ffdf85;
+  box-shadow: inset 0 0 0 1px rgba(223, 175, 83, 0.38);
+}
+
+.admin-nav-badge-alert {
+  background: rgba(203, 46, 55, 0.24);
+  color: #ffb9bd;
+  box-shadow: inset 0 0 0 1px rgba(203, 46, 55, 0.44);
+}
+
+.admin-nav-badge-info {
+  background: rgba(255, 248, 234, 0.12);
+  color: rgba(255, 248, 234, 0.86);
+  box-shadow: inset 0 0 0 1px rgba(255, 248, 234, 0.2);
 }
 
 .nav-item:hover .nav-item-btn {
@@ -661,21 +785,67 @@
   min-height: 66px;
   padding: 0 clamp(22px, 2.4vw, 34px);
   border-bottom: 1px solid var(--admin-line);
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--admin-panel) 92%, transparent);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   box-shadow: 0 2px 10px rgba(15, 23, 42, 0.02);
 }
 
+.admin-topbar-lead {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-topbar-heading {
+  min-width: 0;
+}
+
+/* The group name is the only place the sidebar's grouping is restated once the drawer is
+   closed, so on mobile it is the breadcrumb rather than decoration. */
+.admin-topbar-group {
+  display: block;
+  color: var(--admin-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
 .admin-topbar-title {
+  margin: 1px 0 0;
   color: var(--admin-text);
   font-size: 20px;
   font-weight: 800;
   font-family: var(--font-body);
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-nav-toggle {
+  display: none;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--admin-line);
+  border-radius: 10px;
+  background: var(--admin-panel);
+  color: var(--admin-text);
+  cursor: pointer;
+}
+
+.admin-nav-toggle:hover {
+  background: var(--admin-panel-2);
 }
 
 .admin-topbar-actions {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 10px;
 }
@@ -694,8 +864,38 @@
 }
 
 .admin-sidebar-foot {
+  display: grid;
+  gap: 8px;
   margin-top: auto;
   padding: 12px 8px 0;
+}
+
+.admin-rail-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px dashed rgba(255, 248, 234, 0.16);
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 248, 234, 0.6);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.admin-rail-btn:hover {
+  border-color: rgba(223, 175, 83, 0.32);
+  color: #fff8ea;
+}
+
+/* The rail toggle is desktop furniture: in the drawer the sidebar is already full width,
+   so collapsing it there would only hide labels for no gain. */
+.admin-nav-scrim {
+  display: none;
 }
 
 .admin-logout-btn {
@@ -968,6 +1168,7 @@
 
 .admin-panel-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
@@ -986,6 +1187,14 @@
   font-weight: 800;
   letter-spacing: 1px;
   text-transform: uppercase;
+}
+
+/* The heading column keeps a readable minimum. Without it the widest toolbars — Orders'
+   ten-option status filter — win the space fight outright and squeeze the title to one word
+   per line while pushing their own trailing chips past the viewport edge. */
+.admin-panel-head > :first-child {
+  flex: 1 1 340px;
+  min-width: 0;
 }
 
 .admin-panel-head h2 {
@@ -1015,7 +1224,11 @@
 }
 
 .admin-head-actions {
-  flex: 0 0 auto;
+  /* Shrinkable, so a toolbar too wide to share the row drops onto its own full-width line
+     instead of overflowing; the segmented track then scrolls or wraps within it. */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -1839,23 +2052,12 @@
   }
 }
 
+/* NOTE: this block used to squeeze the sidebar into a 72px icon rail, and the 640px block
+   below turned it into a horizontally-scrolling top strip. Both are superseded by the
+   off-canvas drawer at the end of this file — a drawer plus a rail plus a strip is three
+   answers to one question, and they overrode each other into a broken layout. What stays
+   here is only the content-side stacking. */
 @media (max-width: 860px) {
-  .admin-sidebar {
-    width: 72px;
-    padding-inline: 8px;
-    align-items: center;
-  }
-  .admin-tag,
-  .admin-version,
-  .nav-group,
-  .nav-item span {
-    display: none;
-  }
-  .nav-section + .nav-section {
-    margin: 0;
-    padding: 0;
-    border: 0;
-  }
   .admin-mini-lifecycle {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1863,15 +2065,6 @@
   .admin-order-event-row {
     align-items: flex-start;
     flex-direction: column;
-  }
-  .admin-mark {
-    font-size: 22px;
-  }
-  .nav-item {
-    justify-content: center;
-    width: 44px;
-    height: 44px;
-    padding: 0;
   }
   .admin-content {
     padding: 20px;
@@ -1907,55 +2100,6 @@
   .dash-shortcuts {
     grid-template-columns: 1fr;
   }
-  .admin-shell {
-    flex-direction: column;
-    height: auto;
-    min-height: 100vh;
-    min-height: 100dvh;
-    overflow: visible;
-  }
-  .admin-sidebar {
-    width: 100%;
-    height: auto;
-    align-items: stretch;
-    flex-direction: row;
-    gap: 10px;
-    padding: 12px;
-    border-right: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    overflow-x: auto;
-  }
-  .admin-logo {
-    flex: 0 0 auto;
-    padding: 0 8px 0 0;
-  }
-  .admin-nav {
-    display: flex;
-    gap: 8px;
-    min-width: max-content;
-  }
-  .nav-section {
-    display: contents;
-  }
-  .nav-group,
-  .admin-tag,
-  .admin-version {
-    display: none;
-  }
-  .nav-item {
-    width: auto;
-    min-height: 42px;
-    height: 42px;
-    padding: 0 12px;
-    justify-content: flex-start;
-  }
-  .nav-item span {
-    display: inline;
-  }
-  .admin-main {
-    height: auto;
-    overflow: visible;
-  }
   .admin-topbar {
     min-height: 64px;
     padding: 0 16px;
@@ -1989,9 +2133,9 @@
   .admin-table td {
     padding: 12px;
   }
-  .nav-item {
-    min-height: 44px;
-    height: 44px;
+  /* Comfortable touch target for the drawer's rows at phone sizes. */
+  .nav-item-btn {
+    min-height: 46px;
   }
 }
 
@@ -2447,5 +2591,114 @@
 
   .dash-insights-head {
     align-items: flex-start;
+  }
+}
+
+
+/* ==========================================================================
+   Console shell — narrow viewports
+   The sidebar stops being a column and becomes an off-canvas drawer. The breakpoint is
+   mirrored by NAV_DRAWER_MAX_WIDTH in Admin.tsx; move both together.
+   ========================================================================== */
+@media (max-width: 1080px) {
+  .admin-shell {
+    --admin-nav-w: 0px;
+  }
+
+  .admin-shell.is-railed {
+    --admin-nav-w: 0px;
+  }
+
+  .admin-nav-toggle {
+    display: grid;
+  }
+
+  .admin-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 60;
+    width: min(272px, 82vw);
+    transform: translateX(-100%);
+  }
+
+  /* Railing is meaningless in the drawer — always show the full labelled nav there. */
+  .admin-shell.is-railed .admin-sidebar {
+    padding-inline: 12px;
+  }
+
+  .admin-shell.is-railed .nav-item-label,
+  .admin-shell.is-railed .admin-tag,
+  .admin-shell.is-railed .admin-version,
+  .admin-shell.is-railed .nav-group {
+    display: revert;
+  }
+
+  .admin-shell.is-railed .nav-item-btn,
+  .admin-shell.is-railed .admin-logout-btn,
+  .admin-shell.is-railed .admin-rail-btn {
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 0 12px;
+  }
+
+  .admin-shell.is-railed .admin-nav-badge {
+    position: static;
+    width: auto;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: normal;
+  }
+
+  .admin-shell.is-railed .admin-nav-badge > span[aria-hidden='true'] {
+    display: inline;
+  }
+
+  .admin-rail-btn {
+    display: none;
+  }
+
+  .admin-shell.nav-open .admin-sidebar {
+    transform: translateX(0);
+  }
+
+  .admin-nav-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(26, 18, 8, 0.44);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+  }
+
+  .admin-shell.nav-open .admin-nav-scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* Below this the topbar's trailing chips cost more than they carry: the signed-in address
+   is already in the drawer, and "LIVE API" is a reassurance, not a control. Dropping both
+   is what keeps the section title — the one thing that says where you are — on screen. */
+@media (max-width: 820px) {
+  .admin-topbar .admin-user-chip,
+  .admin-topbar .live-chip {
+    display: none;
+  }
+
+  .admin-topbar-actions .admin-soft-btn {
+    white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-sidebar,
+  .admin-nav-scrim {
+    transition: none;
   }
 }

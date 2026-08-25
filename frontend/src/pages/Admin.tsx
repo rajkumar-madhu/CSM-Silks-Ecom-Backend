@@ -16,7 +16,10 @@ import {
   LogOut,
   Mail,
   MapPin,
+  Menu,
   PackageCheck,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   RotateCcw,
   Search,
@@ -32,6 +35,7 @@ import {
 import { AdminCatalogManager } from '@/features/admin/components/AdminCatalogManager';
 import { AdminChoice } from '@/features/admin/components/AdminChoice';
 import { DashboardInsights } from '@/features/admin/components/DashboardInsights';
+import { useAdminBadges, type AdminBadgeCounts } from '@/features/admin/useAdminBadges';
 import { ADMIN_STATUS_CLASS, ORDER_STATUS_LABEL, formatDateTime, latestTrackingEvent, lifecycleProgress, sortTrackingEvents } from '@/lib/orderLifecycle';
 import { useCatalogLiveRefresh } from '@/lib/useCatalogLiveRefresh';
 import { connectOrderRealtime, type RealtimeStatus } from '@/lib/realtime';
@@ -184,7 +188,75 @@ type AdminNavItem = {
   key: AdminPage;
   label: string;
   icon: typeof BarChart3;
+  /** Which live count, if any, this item badges. Tone drives the badge colour. */
+  badge?: { count: number; tone: 'warn' | 'alert' | 'info'; noun: string };
 };
+
+const RAIL_STORAGE_KEY = 'csm.admin.sidebar-railed';
+// Below this the sidebar stops being a column and becomes an off-canvas drawer. Matches the
+// breakpoint in admin.css — change both together or the drawer opens behind a visible column.
+const NAV_DRAWER_MAX_WIDTH = 1080;
+
+function readRailPreference(): boolean {
+  try {
+    return window.localStorage.getItem(RAIL_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function badgeFor(count: number | undefined, tone: 'warn' | 'alert' | 'info', noun: string) {
+  return count && count > 0 ? { count, tone, noun } : undefined;
+}
+
+/**
+ * The three groups mirror how the shop actually works rather than how the API is organised:
+ * Floor is what is moving today, Catalog is what is on the shelf, House is everything that
+ * reviews the first two after the fact.
+ */
+function buildNavGroups(badges: AdminBadgeCounts): Array<{ label: string; hint: string; items: AdminNavItem[] }> {
+  return [
+    {
+      label: 'Floor',
+      hint: 'Moving today',
+      items: [
+        { key: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+        { key: 'orders', label: 'Orders', icon: ShoppingBag, badge: badgeFor(badges.orders, 'warn', 'orders awaiting action') },
+        { key: 'shipments', label: 'Shipments', icon: Truck },
+        { key: 'returns', label: 'Returns', icon: RotateCcw, badge: badgeFor(badges.returns, 'warn', 'open returns') },
+      ],
+    },
+    {
+      label: 'Catalog',
+      hint: 'On the shelf',
+      items: [
+        { key: 'products', label: 'Catalog', icon: Boxes },
+        { key: 'inventory', label: 'Inventory', icon: PackageCheck },
+        { key: 'unsold', label: 'Stock alerts', icon: AlertTriangle, badge: badgeFor(badges.unsold, 'alert', 'unresolved stock alerts') },
+        { key: 'coupons', label: 'Coupons', icon: BadgePercent },
+      ],
+    },
+    {
+      label: 'House',
+      hint: 'Pulse & oversight',
+      items: [
+        { key: 'customers', label: 'Customers', icon: Users },
+        { key: 'reviews', label: 'Reviews', icon: Star, badge: badgeFor(badges.reviews, 'info', 'reviews held back from the storefront') },
+        { key: 'reports', label: 'Reports', icon: FileText },
+        { key: 'audit', label: 'Audit', icon: ShieldCheck },
+      ],
+    },
+  ];
+}
+
+function AdminNavBadge({ badge, label }: { badge: NonNullable<AdminNavItem['badge']>; label: string }) {
+  return (
+    <span className={`admin-nav-badge admin-nav-badge-${badge.tone}`} title={`${badge.count} ${badge.noun}`}>
+      <span aria-hidden="true">{badge.count > 99 ? '99+' : badge.count}</span>
+      <span className="sr-only">{`${label}: ${badge.count} ${badge.noun}`}</span>
+    </span>
+  );
+}
 
 export function Admin() {
   const { refreshSession } = useApp();
@@ -197,14 +269,51 @@ export function Admin() {
   const [loginError, setLoginError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+  const [railed, setRailed] = useState(readRailPreference);
+  const { counts: badgeCounts, refresh: refreshBadges } = useAdminBadges(authed);
 
   const navigatePage = (next: AdminPage) => {
     setPage(next);
+    setNavOpen(false);
     const hash = `#${next}`;
     if (window.location.hash !== hash) {
       window.history.replaceState(null, '', hash);
     }
+    // Acting on a section is the moment its badge is most likely stale, so re-poll rather
+    // than leaving a count that contradicts the screen the operator is now looking at.
+    refreshBadges();
   };
+
+  const toggleRail = () => {
+    setRailed(current => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(RAIL_STORAGE_KEY, next ? '1' : '0');
+      } catch {
+        // A locked-down storage partition should cost the preference, not the click.
+      }
+      return next;
+    });
+  };
+
+  // The drawer is a mobile affordance; if the viewport grows back into column territory
+  // leave it closed so the scrim does not linger over a sidebar that is already visible.
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setNavOpen(false);
+    };
+    const onResize = () => {
+      if (window.innerWidth > NAV_DRAWER_MAX_WIDTH) setNavOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [navOpen]);
 
   useEffect(() => {
     const onHashChange = () => setPage(pageFromHash());
@@ -357,74 +466,86 @@ export function Admin() {
     );
   }
 
-  const navGroups: Array<{ label: string; items: AdminNavItem[] }> = [
-    {
-      label: 'Floor',
-      items: [
-        { key: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-        { key: 'orders', label: 'Orders', icon: ShoppingBag },
-        { key: 'shipments', label: 'Shipments', icon: Truck },
-        { key: 'returns', label: 'Returns', icon: RotateCcw },
-      ],
-    },
-    {
-      label: 'Catalog',
-      items: [
-        { key: 'products', label: 'Catalog', icon: Boxes },
-        { key: 'inventory', label: 'Inventory', icon: PackageCheck },
-        { key: 'unsold', label: 'Stock alerts', icon: AlertTriangle },
-        { key: 'coupons', label: 'Coupons', icon: BadgePercent },
-      ],
-    },
-    {
-      label: 'House',
-      items: [
-        { key: 'customers', label: 'Customers', icon: Users },
-        { key: 'reviews', label: 'Reviews', icon: Star },
-        { key: 'reports', label: 'Reports', icon: FileText },
-        { key: 'audit', label: 'Audit', icon: ShieldCheck },
-      ],
-    },
-  ];
+  const navGroups = buildNavGroups(badgeCounts);
   const navItems = navGroups.flatMap((group) => group.items);
+  const activeGroup = navGroups.find(group => group.items.some(item => item.key === page));
+  const activeItem = navItems.find(item => item.key === page);
 
   return (
-    <div className="admin-shell">
-      <div className="admin-sidebar">
+    <div className={`admin-shell${railed ? ' is-railed' : ''}${navOpen ? ' nav-open' : ''}`}>
+      <div className="admin-nav-scrim" onClick={() => setNavOpen(false)} aria-hidden="true" />
+      <aside className="admin-sidebar" id="admin-sidebar">
         <div className="admin-logo">
           <span className="admin-mark">CSM</span>
           <span className="admin-tag">Kanchipuram house desk</span>
           <div className="admin-version"><span className="v-dot" /> Live atelier</div>
         </div>
-        <div className="admin-nav">
+        <nav className="admin-nav" aria-label="Console sections">
           {navGroups.map((group) => (
             <div key={group.label} className="nav-section">
-              <div className="nav-group">{group.label}</div>
-              {group.items.map(({ key, label, icon: Icon }) => (
-                <div key={key} className={`nav-item ${page === key ? 'active' : ''}`} role="presentation">
-                  <button type="button" className="nav-item-btn" onClick={() => navigatePage(key)}>
-                    <span className="nav-icon-wrap" aria-hidden="true"><Icon className="nav-icon" size={16} /></span>
-                    <span>{label}</span>
-                  </button>
-                </div>
-              ))}
+              <div className="nav-group" title={group.hint}>{group.label}</div>
+              <ul className="nav-list">
+                {group.items.map(({ key, label, icon: Icon, badge }) => (
+                  <li key={key} className={`nav-item ${page === key ? 'active' : ''}`}>
+                    <button
+                      type="button"
+                      className="nav-item-btn"
+                      aria-current={page === key ? 'page' : undefined}
+                      title={railed ? label : undefined}
+                      onClick={() => navigatePage(key)}
+                    >
+                      <span className="nav-icon-wrap" aria-hidden="true"><Icon className="nav-icon" size={16} /></span>
+                      <span className="nav-item-label">{label}</span>
+                      {badge && <AdminNavBadge badge={badge} label={label} />}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           ))}
-        </div>
+        </nav>
         <div className="admin-sidebar-foot">
-          <button className="admin-logout-btn" onClick={logout}><LogOut size={16} /> Sign out</button>
+          <button
+            type="button"
+            className="admin-rail-btn"
+            onClick={toggleRail}
+            aria-pressed={railed}
+            title={railed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {railed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            <span className="nav-item-label">Collapse</span>
+          </button>
+          <button className="admin-logout-btn" onClick={logout}>
+            <LogOut size={16} />
+            <span className="nav-item-label">Sign out</span>
+          </button>
         </div>
-      </div>
+      </aside>
 
       <div className="admin-main">
-        <div className="admin-topbar">
-          <div className="admin-topbar-title">{navItems.find(item => item.key === page)?.label || 'Dashboard'}</div>
+        <header className="admin-topbar">
+          <div className="admin-topbar-lead">
+            <button
+              type="button"
+              className="admin-nav-toggle"
+              onClick={() => setNavOpen(open => !open)}
+              aria-expanded={navOpen}
+              aria-controls="admin-sidebar"
+              aria-label={navOpen ? 'Close console menu' : 'Open console menu'}
+            >
+              <Menu size={18} />
+            </button>
+            <div className="admin-topbar-heading">
+              <span className="admin-topbar-group">{activeGroup?.label || 'Floor'}</span>
+              <h1 className="admin-topbar-title">{activeItem?.label || 'Dashboard'}</h1>
+            </div>
+          </div>
           <div className="admin-topbar-actions">
             {adminUser && <span className="admin-user-chip">{adminUser.email || adminUser.full_name || 'Admin'}</span>}
             <div className="live-chip"><span className="live-dot2" /> LIVE API</div>
             <button className="admin-soft-btn" onClick={logout}><LogOut size={14} /> Sign out</button>
           </div>
-        </div>
+        </header>
         <div className="admin-content">
           {page === 'dashboard' && <AdminDashboard onOpenPage={navigatePage} />}
           {page === 'orders' && <AdminOrders />}
