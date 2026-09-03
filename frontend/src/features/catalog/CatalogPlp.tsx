@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowUpDown, SlidersHorizontal, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useCatalogLiveRefresh } from '@/lib/useCatalogLiveRefresh';
@@ -13,6 +13,7 @@ import { PlpBanners, type PlpBannerSlide, type PlpCategoryTile } from './compone
 import {
   ATTRIBUTE_KEYS,
   FALLBACK_SORTS,
+  activePlpChips,
   buildProductQuery,
   clearedPlpState,
   parsePlpParams,
@@ -20,16 +21,35 @@ import {
   type PlpFilterState,
 } from './plpFilters';
 
+export interface CatalogPlpQuickLink {
+  key: string;
+  label: string;
+  note: string;
+  buildState: (state: PlpFilterState) => PlpFilterState;
+  clearState?: (state: PlpFilterState) => PlpFilterState;
+  isActive?: (state: PlpFilterState) => boolean;
+}
+
 interface CatalogPlpProps {
   gender: 'women' | 'men';
   title: string;
+  description?: string;
   slides: PlpBannerSlide[];
   tiles: PlpCategoryTile[];
+  quickLinks?: CatalogPlpQuickLink[];
 }
 
 const PER_PAGE = 24;
 
-export function CatalogPlp({ gender, title, slides, tiles }: CatalogPlpProps) {
+function formatSlug(value: string) {
+  return value
+    .split('-')
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+export function CatalogPlp({ gender, title, description, slides, tiles, quickLinks = [] }: CatalogPlpProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [facets, setFacets] = useState<CatalogFacets | null>(null);
@@ -46,6 +66,20 @@ export function CatalogPlp({ gender, title, slides, tiles }: CatalogPlpProps) {
     () => parsePlpParams(searchParams, knownAttributeKeys),
     [searchParams, knownAttributeKeys],
   );
+  const categoryLabels = useMemo(() => {
+    const next = new Map<string, string>();
+    for (const tile of tiles) next.set(tile.key, tile.label);
+    for (const category of facets?.categories || []) next.set(category.slug, category.name);
+    return next;
+  }, [facets, tiles]);
+  const activeCategoryLabel = state.category ? categoryLabels.get(state.category) || formatSlug(state.category) : '';
+  const displayTitle = activeCategoryLabel ? `${activeCategoryLabel} Edit` : title;
+  const activeFilterCount = useMemo(() => activePlpChips(state).length, [state]);
+  const collectionPath = gender === 'men' ? '/mens' : '/womens';
+  const collectionLabel = gender === 'men' ? 'Men' : 'Women';
+  const discoveryCopy = activeCategoryLabel
+    ? `Browse ${activeCategoryLabel.toLowerCase()} picks with live stock, dense filters, and quick sorting across the full CSM Silks catalogue.`
+    : (description || `Browse the ${collectionLabel.toLowerCase()} catalogue with live inventory, price filters, and ready-to-shop silk edits.`);
 
   // Identifies the exact first-page request the current URL asks for.
   const queryKey = useMemo(
@@ -182,6 +216,53 @@ export function CatalogPlp({ gender, title, slides, tiles }: CatalogPlpProps) {
         onCategory={key => applyState({ ...state, category: key })}
       />
 
+      <section className="plp-discovery" aria-label="Collection overview">
+        <nav className="plp-breadcrumbs" aria-label="Breadcrumb">
+          <Link to="/">Home</Link>
+          <span>/</span>
+          <Link to={collectionPath}>{collectionLabel}</Link>
+          <span>/</span>
+          <span aria-current="page">{displayTitle}</span>
+        </nav>
+
+        <div className="plp-discovery-head">
+          <p className="plp-discovery-copy">{discoveryCopy}</p>
+          <div className="plp-discovery-pills" aria-label="Collection highlights">
+            <span className="plp-discovery-pill">
+              <strong>{loading && total === null ? 'Loading…' : (total ?? 0).toLocaleString('en-IN')}</strong>
+              styles live
+            </span>
+            <span className="plp-discovery-pill">
+              <strong>{activeFilterCount ? activeFilterCount : '0'}</strong>
+              filters active
+            </span>
+            <span className="plp-discovery-pill">
+              <strong>2-6 days</strong>
+              dispatch window
+            </span>
+          </div>
+        </div>
+
+        {quickLinks.length > 0 && (
+          <div className="plp-quick-picks" role="navigation" aria-label="Quick browse">
+            {quickLinks.map(link => {
+              const active = link.isActive?.(state) ?? false;
+              return (
+                <button
+                  key={link.key}
+                  type="button"
+                  className={`plp-quick-pick ${active ? 'active' : ''}`}
+                  onClick={() => applyState(active ? (link.clearState ? link.clearState(state) : clearedPlpState(state)) : link.buildState(state))}
+                >
+                  <span className="plp-quick-pick-label">{link.label}</span>
+                  <span className="plp-quick-pick-note">{link.note}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       <div className="plp-body">
         <aside className="plp-aside">
           <FilterSidebar facets={facets} state={state} onChange={applyState} />
@@ -189,7 +270,7 @@ export function CatalogPlp({ gender, title, slides, tiles }: CatalogPlpProps) {
 
         <main className="plp-main">
           <PlpSortBar
-            title={title}
+            title={displayTitle}
             total={total}
             loading={loading}
             facets={facets}

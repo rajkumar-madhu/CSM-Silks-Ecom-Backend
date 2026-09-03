@@ -225,6 +225,8 @@ export function ProductDetail() {
   const inWish = isInWishlist(p.id);
   const canPurchase = activeStock > 0;
   const maxQty = Math.max(1, Math.min(activeStock || 1, 10));
+  const activeImageIndex = Math.min(selectedThumb, Math.max(imageList.length - 1, 0));
+  const mediaCount = Math.max(imageList.length, 1);
 
   const attrs = (() => {
     if (p.gender !== 'men') {
@@ -320,28 +322,47 @@ export function ProductDetail() {
     <div className="pd-page pd-flipkart">
       <div className="pd-grid">
         <div className="pd-gallery">
-          <div className="pd-main-img">
-            <SpinViewer
-              product={p}
-              images={imageList}
-              index={Math.min(selectedThumb, Math.max(imageList.length - 1, 0))}
-              onIndexChange={setSelectedThumb}
-            />
-            {disc > 0 && <span className="pd-gallery-off">{disc}% OFF</span>}
-          </div>
-          <div className="pd-thumbs">
-            {imageList.map((value, i) => (
-              <button
-                type="button"
-                key={`${value}-${i}`}
-                className={`pd-thumb ${i === selectedThumb ? 'on' : ''}`}
-                style={isImageAssetUrl(value) ? { backgroundImage: `url(${value})` } : { background: value }}
-                onClick={() => setSelectedThumb(i)}
-                aria-label={`View product image ${i + 1}`}
-              >
-                {!isImageAssetUrl(value) && 'CSM'}
-              </button>
-            ))}
+          <div className="pd-media-shell">
+            <div className="pd-thumbs" aria-label="Product gallery">
+              {imageList.map((value, i) => (
+                <button
+                  type="button"
+                  key={`${value}-${i}`}
+                  className={`pd-thumb ${i === selectedThumb ? 'on' : ''}`}
+                  style={isImageAssetUrl(value) ? { backgroundImage: `url(${value})` } : { background: value }}
+                  onClick={() => setSelectedThumb(i)}
+                  aria-label={`View product image ${i + 1}`}
+                  aria-pressed={i === selectedThumb}
+                >
+                  <span>{String(i + 1).padStart(2, '0')}</span>
+                  {!isImageAssetUrl(value) && <strong>CSM</strong>}
+                </button>
+              ))}
+            </div>
+
+            <div className="pd-media-stage">
+              <div className="pd-main-img">
+                <SpinViewer
+                  product={p}
+                  images={imageList}
+                  index={activeImageIndex}
+                  onIndexChange={setSelectedThumb}
+                />
+                {disc > 0 && <span className="pd-gallery-off">{disc}% OFF</span>}
+              </div>
+
+              <div className="pd-media-meta">
+                <div>
+                  <span className="pd-media-kicker">Visual edit</span>
+                  <strong>Look {activeImageIndex + 1} of {mediaCount}</strong>
+                </div>
+                <div className="pd-media-pills">
+                  <span>Tap thumbnails to switch views</span>
+                  {selectedColorName && <span>{selectedColorName}</span>}
+                  {selectedSize && <span>Size {selectedSize}</span>}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

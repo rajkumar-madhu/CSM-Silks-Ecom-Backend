@@ -1828,6 +1828,142 @@
   background: rgba(30, 24, 20, 0.94);
 }
 
+/* Myntra-like media rail */
+.pd-media-shell {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.pd-media-stage {
+  display: grid;
+  gap: 14px;
+}
+
+.pd-thumbs {
+  flex-direction: column;
+  margin-top: 0;
+}
+
+.pd-thumb {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: space-between;
+  width: 88px;
+  min-height: 104px;
+  height: auto;
+  padding: 10px;
+  text-align: left;
+  overflow: hidden;
+}
+
+.pd-thumb span,
+.pd-thumb strong {
+  position: relative;
+  z-index: 1;
+}
+
+.pd-thumb span {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.pd-thumb strong {
+  font-size: 12px;
+}
+
+.pd-thumb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(15, 13, 11, 0.08), rgba(15, 13, 11, 0.68));
+}
+
+.pd-media-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(179, 126, 40, 0.06), rgba(255, 255, 255, 0.96));
+}
+
+.pd-media-kicker {
+  display: block;
+  color: var(--soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.pd-media-meta strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.pd-media-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pd-media-pills span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .pd-media-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .pd-thumbs {
+    order: 2;
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .pd-thumb {
+    width: 76px;
+    min-height: 92px;
+    flex: 0 0 auto;
+  }
+
+  .pd-media-meta {
+    order: 3;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pd-media-pills {
+    justify-content: flex-start;
+  }
+}
+
+[data-theme="dark"] .pd-media-meta {
+  background: rgba(30, 24, 20, 0.94);
+}
+
+[data-theme="dark"] .pd-media-pills span {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .catalog-swatches {
   display: inline-flex;
   align-items: center;

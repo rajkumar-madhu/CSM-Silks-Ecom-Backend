@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 export interface PlpBannerSlide {
   image: string;
@@ -46,14 +47,20 @@ export function PlpBanners({ slides, tiles, activeCategory, onCategory }: PlpBan
             <h2>{slide.title}</h2>
             <p>{slide.text}</p>
             {slide.cta && (
-              <a
-                className="plp-banner-cta"
-                href={slide.cta.href}
-                target={slide.cta.external ? '_blank' : undefined}
-                rel={slide.cta.external ? 'noreferrer' : undefined}
-              >
-                {slide.cta.label}
-              </a>
+              slide.cta.external || !slide.cta.href.startsWith('/') ? (
+                <a
+                  className="plp-banner-cta"
+                  href={slide.cta.href}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {slide.cta.label}
+                </a>
+              ) : (
+                <Link className="plp-banner-cta" to={slide.cta.href}>
+                  {slide.cta.label}
+                </Link>
+              )
             )}
           </div>
           {slides.length > 1 && (
