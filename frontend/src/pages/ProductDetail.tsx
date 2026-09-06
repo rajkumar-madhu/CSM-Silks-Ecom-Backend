@@ -323,7 +323,7 @@ export function ProductDetail() {
       <div className="pd-grid">
         <div className="pd-gallery">
           <div className="pd-media-shell">
-            <div className="pd-thumbs" aria-label="Product gallery">
+            <div className="pd-thumbs" role="group" aria-label="Product gallery">
               {imageList.map((value, i) => (
                 <button
                   type="button"

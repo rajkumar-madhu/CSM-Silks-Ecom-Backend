@@ -137,8 +137,21 @@ export function toggleListValue(list: string[], value: string): string[] {
   return list.includes(value) ? list.filter(item => item !== value) : [...list, value];
 }
 
-function titleCase(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+/** Human label for a URL slug ("daily-wear" -> "Daily Wear"). Shared by the chip row and the
+ *  PLP heading/breadcrumb so a category with no facet label reads the same everywhere. */
+export function slugToLabel(value: string): string {
+  return value
+    .split('-')
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+/** Result-count text shared by the sort bar and the discovery pill. Only the very first load
+ *  (no count known yet) reads as loading; a refetch keeps the last known count on screen. */
+export function plpTotalLabel(total: number | null, loading: boolean): string {
+  if (loading && total === null) return 'Loading…';
+  return (total ?? 0).toLocaleString('en-IN');
 }
 
 function formatInr(value: string): string {
@@ -158,7 +171,7 @@ export interface PlpChip {
 export function activePlpChips(state: PlpFilterState): PlpChip[] {
   const chips: PlpChip[] = [];
   if (state.category) {
-    chips.push({ key: `category:${state.category}`, label: titleCase(state.category), next: { ...state, category: '' } });
+    chips.push({ key: `category:${state.category}`, label: slugToLabel(state.category), next: { ...state, category: '' } });
   }
   if (state.minPrice || state.maxPrice) {
     const label = state.minPrice && state.maxPrice

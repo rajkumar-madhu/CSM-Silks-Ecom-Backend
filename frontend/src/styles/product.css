@@ -1930,6 +1930,17 @@
 @media (max-width: 860px) {
   .pd-media-shell {
     grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  /* Flatten the stage so the main image, thumbnails, and meta card are siblings in the shell
+   * grid; `order` only reorders siblings, so this is what makes image -> thumbs -> meta work. */
+  .pd-media-stage {
+    display: contents;
+  }
+
+  .pd-main-img {
+    order: 1;
   }
 
   .pd-thumbs {

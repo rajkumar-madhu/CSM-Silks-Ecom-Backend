@@ -606,6 +606,18 @@
   line-height: 1.4;
 }
 
+/* The pill and active pick paint light cream gradients, so their var(--ink) text (near-white in
+ * dark mode) needs a dark surface underneath — mirrors the .pd-media-meta override in product.css. */
+[data-theme="dark"] .plp-discovery-pill {
+  border-color: rgba(212, 175, 55, 0.22);
+  background: linear-gradient(180deg, rgba(36, 31, 26, 0.96) 0%, rgba(26, 23, 20, 0.94) 100%);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+}
+
+[data-theme="dark"] .plp-quick-pick.active {
+  background: linear-gradient(180deg, rgba(58, 46, 26, 0.96) 0%, rgba(40, 33, 22, 0.94) 100%);
+}
+
 /* --- Sort bar + result count -------------------------------------------- */
 
 .plp-sortbar-wrap {

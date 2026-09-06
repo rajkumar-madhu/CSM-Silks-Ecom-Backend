@@ -47,12 +47,14 @@ export function PlpBanners({ slides, tiles, activeCategory, onCategory }: PlpBan
             <h2>{slide.title}</h2>
             <p>{slide.text}</p>
             {slide.cta && (
+              // `external` alone decides new-tab behaviour; a non-path href (tel:, mailto:, #anchor)
+              // still needs a plain anchor but stays in the current tab unless asked.
               slide.cta.external || !slide.cta.href.startsWith('/') ? (
                 <a
                   className="plp-banner-cta"
                   href={slide.cta.href}
-                  target="_blank"
-                  rel="noreferrer"
+                  target={slide.cta.external ? '_blank' : undefined}
+                  rel={slide.cta.external ? 'noreferrer' : undefined}
                 >
                   {slide.cta.label}
                 </a>
