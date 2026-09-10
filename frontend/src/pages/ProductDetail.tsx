@@ -693,7 +693,7 @@ export function ProductDetail() {
                       <button
                         type="button"
                         key={size}
-                        className={`pd-size ${size === selectedSize ? 'on' : ''} ${stock <= 0 ? 'out' : ''}`}
+                        className={`pd-size-chip ${size === selectedSize ? 'on' : ''} ${stock <= 0 ? 'disabled' : ''}`}
                         onClick={() => setSelectedSize(size)}
                         disabled={stock <= 0}
                         aria-pressed={size === selectedSize}
