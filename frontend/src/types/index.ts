@@ -94,6 +94,9 @@ export interface Product {
   review_count?: number;
   total_sold?: number;
   length_meters?: number | string | null;
+  /** Coins earned per rupee spent, served from the same setting checkout awards
+   *  from, so the PDP's "earn N coins" line cannot drift from the credit. */
+  loyalty_points_per_rupee?: number;
 }
 
 export interface AdminProductQuickCreatePayload {
