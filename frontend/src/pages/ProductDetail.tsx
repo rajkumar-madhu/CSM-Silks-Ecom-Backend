@@ -1,10 +1,11 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   BadgeCheck,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   CreditCard,
   FileText,
   Flame,
@@ -74,6 +75,7 @@ export function ProductDetail() {
   const [bundleOff, setBundleOff] = useState<number[]>([]);
   const [fabricOptions, setFabricOptions] = useState<string[]>([]);
   const [showAllOffers, setShowAllOffers] = useState(false);
+  const thumbRailRef = useRef<HTMLDivElement | null>(null);
   const {
     pinCode,
     setPinCode,
@@ -462,6 +464,16 @@ export function ProductDetail() {
   // next), so never leave the panel pointed at a tab that is no longer rendered.
   const currentTab: PdTab = tabs.some(tab => tab.key === activeTab) ? activeTab : (tabs[0]?.key || 'shipping');
 
+  // The rail is a column on desktop and a row on mobile, so scroll along whichever
+  // axis actually overflows rather than assuming one.
+  const scrollThumbs = (direction: 1 | -1) => {
+    const rail = thumbRailRef.current;
+    if (!rail) return;
+    const vertical = rail.scrollHeight > rail.clientHeight;
+    const step = (vertical ? rail.clientHeight : rail.clientWidth) * 0.6 * direction;
+    rail.scrollBy(vertical ? { top: step, behavior: 'smooth' } : { left: step, behavior: 'smooth' });
+  };
+
   const addBundleToCart = async () => {
     if (canPurchase) await addToCart(buildCartProduct(), quantity);
     for (const item of bundleChosen) await addToCart(item, 1);
@@ -491,7 +503,13 @@ export function ProductDetail() {
         <div className="pd-grid">
           <div className="pd-gallery">
             <div className="pd-media-shell">
-              <div className="pd-thumbs" role="group" aria-label="Product gallery">
+              <div className="pd-thumb-col">
+                {imageList.length > 4 && (
+                  <button type="button" className="pd-thumb-nav" onClick={() => scrollThumbs(-1)} aria-label="Scroll thumbnails back">
+                    <ChevronUp size={16} />
+                  </button>
+                )}
+                <div className="pd-thumbs" role="group" aria-label="Product gallery" ref={thumbRailRef}>
                 {imageList.map((value, i) => (
                   <button
                     type="button"
@@ -506,6 +524,12 @@ export function ProductDetail() {
                     {!isImageAssetUrl(value) && <strong>CSM</strong>}
                   </button>
                 ))}
+                </div>
+                {imageList.length > 4 && (
+                  <button type="button" className="pd-thumb-nav" onClick={() => scrollThumbs(1)} aria-label="Scroll thumbnails forward">
+                    <ChevronDown size={16} />
+                  </button>
+                )}
               </div>
 
               <div className="pd-media-stage">
@@ -595,8 +619,8 @@ export function ProductDetail() {
               </div>
             )}
 
-            <div className="pd-section-lbl">
-              Color{selectedColorName ? <span className="pd-lbl-val"> : {selectedColorName}</span> : null}
+            <div className="pd-opt-lbl">
+              Color:{selectedColorName ? <span> {selectedColorName}</span> : null}
             </div>
             <div className="pd-colors">
               {visibleColors.map((variant, i) => {
@@ -627,8 +651,8 @@ export function ProductDetail() {
 
             {silkTypes.length > 0 && (
               <>
-                <div className="pd-section-lbl">
-                  Silk Type{activeFabric ? <span className="pd-lbl-val"> : {activeFabric}</span> : null}
+                <div className="pd-opt-lbl">
+                  Silk Type:{activeFabric ? <span> {activeFabric}</span> : null}
                 </div>
                 <div className="pd-chip-row">
                   {silkTypes.slice(0, 4).map(fabric => {
@@ -654,10 +678,10 @@ export function ProductDetail() {
 
             {activeLength && (
               <>
-                <div className="pd-section-lbl">
-                  Length
-                  <span className="pd-lbl-val">
-                    {' '}: {activeLength.key} Meters{activeLength.blouseIncluded ? ' (With Blouse Piece)' : ''}
+                <div className="pd-opt-lbl">
+                  Length:
+                  <span>
+                    {' '}{activeLength.key} Meters{activeLength.blouseIncluded ? ' (With Blouse Piece)' : ''}
                   </span>
                 </div>
                 {lengthOptions.length > 1 && (
@@ -683,8 +707,8 @@ export function ProductDetail() {
 
             {sizeOptions.length > 0 && (
               <>
-                <div className="pd-section-lbl">
-                  Size{selectedSize ? <span className="pd-lbl-val"> : {selectedSize}</span> : null}
+                <div className="pd-opt-lbl">
+                  Size:{selectedSize ? <span> {selectedSize}</span> : null}
                 </div>
                 <div className="pd-size-row">
                   {sizeOptions.map(size => {
@@ -706,7 +730,7 @@ export function ProductDetail() {
               </>
             )}
 
-            <div className="pd-section-lbl">Quantity</div>
+            <div className="pd-opt-lbl">Quantity</div>
             <div className="pd-qty-row">
               <button type="button" className="pd-qty-btn" onClick={() => setQuantity(q => Math.max(1, q - 1))} disabled={quantity <= 1} aria-label="Decrease quantity">
                 <Minus size={16} />
@@ -861,7 +885,10 @@ export function ProductDetail() {
               <div className="pd-rail-trust">
                 <div><ShieldCheck size={18} /><span>100% Pure Silk Assured</span></div>
                 <div><RotateCcw size={18} /><span>Easy {p.return_days || 15}-Day Returns</span></div>
-                <div><Truck size={18} /><span>Free Shipping Above Rs 999</span></div>
+                {/* Just "Free Shipping" here: four trust marks across leaves a ~70px
+                    column, and the threshold is already stated in the offers card
+                    above and in the delivery card in the buy box. */}
+                <div><Truck size={18} /><span>Free Shipping</span></div>
                 <div><CreditCard size={18} /><span>Secure Payments</span></div>
               </div>
             </section>
@@ -1156,11 +1183,7 @@ export function ProductDetail() {
           {relatedItems.length > 0 && (
             <section className="pd-related" aria-labelledby="pd-related-title">
               <div className="pd-related-head">
-                {/* Only claim the category when every card actually belongs to it —
-                    the rail tops up from the same gender when the category is thin. */}
-                <h2 id="pd-related-title">
-                  {relatedItems.every(item => item.cat === p.cat) ? `More from ${p.cat}` : 'You May Also Like'}
-                </h2>
+                <h2 id="pd-related-title">You May Also Like</h2>
                 <button type="button" onClick={() => navigate(p.gender === 'men' ? '/mens' : '/womens')}>
                   View all
                 </button>
