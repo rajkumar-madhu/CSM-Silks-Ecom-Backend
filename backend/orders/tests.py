@@ -708,8 +708,8 @@ class InvoiceTotalsTests(TestCase):
             status=Order.Status.CONFIRMED, payment_method=Order.PaymentMethod.COD,
         )
         html = render_invoice_html(order)
-        self.assertIn("<strong>Subtotal:</strong> Rs 10000.00", html)
-        self.assertIn("<strong>House finishing:</strong> Rs 500.00", html)
+        self.assertIn("<strong>Subtotal:</strong> ₹10000.00", html)
+        self.assertIn("<strong>House finishing:</strong> ₹500.00", html)
 
         printed = (
             (order.subtotal - order.finishing_amount) + order.finishing_amount

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Clock3, MapPin, PackageOpen, RefreshCw, Route, Star } from 'lucide-react';
 import { api } from '@/lib/api';
+import { inr } from '@/lib/money';
 import { CUSTOMER_STATUS_CLASS, ORDER_STATUS_LABEL, formatDateTime, lifecycleProgress, trackingSummary } from '@/lib/orderLifecycle';
 import { connectOrderRealtime, type RealtimeStatus } from '@/lib/realtime';
 import { useApp } from '@/store/AppContext';
@@ -287,7 +288,7 @@ export function Orders() {
                   <div className="oc-name">{first?.product_name || 'CSM Silks order'}</div>
                   <div className="oc-meta">{new Date(o.created_at).toLocaleDateString('en-IN')} - {o.courier_name || 'Processing'}</div>
                 </div>
-                <div className="oc-price">Rs {Number(o.total_amount).toLocaleString('en-IN')}</div>
+                <div className="oc-price">{inr(o.total_amount)}</div>
               </div>
               <div className="oc-trace-panel">
                 <div className="oc-trace-head">

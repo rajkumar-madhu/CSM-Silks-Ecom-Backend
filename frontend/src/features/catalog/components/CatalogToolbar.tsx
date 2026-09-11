@@ -1,4 +1,5 @@
 import { SlidersHorizontal } from 'lucide-react';
+import { inr } from '@/lib/money';
 import type { CatalogFacets } from '@/types';
 
 interface CatalogToolbarProps {
@@ -91,7 +92,7 @@ export function CatalogToolbar({
         </label>
       )}
       <label className="catalog-control catalog-range">
-        <span>Max price: Rs {Number(maxPrice || max).toLocaleString('en-IN')}</span>
+        <span>Max price: {inr(maxPrice || max)}</span>
         <input
           type="range"
           min={1000}

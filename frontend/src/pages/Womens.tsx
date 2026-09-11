@@ -49,7 +49,7 @@ const QUICK_LINKS: CatalogPlpQuickLink[] = [
   },
   {
     key: 'under-5000',
-    label: 'Under Rs 5,000',
+    label: 'Under ₹5,000',
     note: 'Daily wear and gifting picks',
     isActive: state => state.minPrice === '' && state.maxPrice === '5000',
     buildState: state => ({ ...state, minPrice: '', maxPrice: '5000' }),

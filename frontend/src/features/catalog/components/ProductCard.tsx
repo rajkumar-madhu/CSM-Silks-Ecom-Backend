@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { getDeliveryPin } from '@/lib/deliveryPin';
 import { productDetailPath } from '@/lib/productPaths';
 import { resolveAssetUrl } from '@/lib/api';
+import { inr } from '@/lib/money';
 import { ProductVisual } from '@/ui/components';
 import { useApp } from '@/store/AppContext';
 import type { Product } from '@/types';
@@ -89,15 +90,15 @@ export function ProductCard({ product, layout = 'default' }: ProductCardProps) {
             {product.mrp > product.price ? (
               <>
                 <span className="sr-only">
-                  Regular price Rs {product.mrp.toLocaleString('en-IN')}, sale price Rs{' '}
+                  Regular price Rupees {product.mrp.toLocaleString('en-IN')}, sale price Rupees{' '}
                   {product.price.toLocaleString('en-IN')}
                 </span>
-                <strong aria-hidden="true">₹{product.price.toLocaleString('en-IN')}</strong>
-                <s aria-hidden="true">₹{product.mrp.toLocaleString('en-IN')}</s>
+                <strong aria-hidden="true">{inr(product.price)}</strong>
+                <s aria-hidden="true">{inr(product.mrp)}</s>
                 {discount > 0 && <em aria-hidden="true">({discount}% Off)</em>}
               </>
             ) : (
-              <strong>₹{product.price.toLocaleString('en-IN')}</strong>
+              <strong>{inr(product.price)}</strong>
             )}
           </span>
         </Link>
@@ -144,19 +145,19 @@ export function ProductCard({ product, layout = 'default' }: ProductCardProps) {
               {product.mrp > product.price ? (
                 <>
                   <span className="sr-only">
-                    Regular price Rs {product.mrp.toLocaleString('en-IN')}, sale price Rs{' '}
+                    Regular price Rupees {product.mrp.toLocaleString('en-IN')}, sale price Rupees{' '}
                     {product.price.toLocaleString('en-IN')}
                   </span>
-                  <strong aria-hidden="true">Rs {product.price.toLocaleString('en-IN')}</strong>
+                  <strong aria-hidden="true">{inr(product.price)}</strong>
                   <s aria-hidden="true" className="product-mrp-inline">
-                    Rs {product.mrp.toLocaleString('en-IN')}
+                    {inr(product.mrp)}
                   </s>
                   {discount > 0 && (
                     <span aria-hidden="true" className="product-price-off">{discount}% off</span>
                   )}
                 </>
               ) : (
-                <strong>Rs {product.price.toLocaleString('en-IN')}</strong>
+                <strong>{inr(product.price)}</strong>
               )}
             </div>
             <h3>{product.name}</h3>
@@ -221,8 +222,8 @@ export function ProductCard({ product, layout = 'default' }: ProductCardProps) {
         </Link>
         <div className="product-card-bottom">
           <Link to={href} className="product-card-price-link">
-            <div className="product-price">Rs {product.price.toLocaleString('en-IN')}</div>
-            {product.mrp > product.price && <div className="product-mrp">Rs {product.mrp.toLocaleString('en-IN')}</div>}
+            <div className="product-price">{inr(product.price)}</div>
+            {product.mrp > product.price && <div className="product-mrp">{inr(product.mrp)}</div>}
           </Link>
           <button
             type="button"

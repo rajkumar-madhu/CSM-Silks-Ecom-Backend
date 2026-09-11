@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { getDeliveryPin } from '@/lib/deliveryPin';
+import { inr as fmt } from '@/lib/money';
 import { useCatalogLiveRefresh } from '@/lib/useCatalogLiveRefresh';
 import { useApp } from '@/store/AppContext';
 import { ProductVisual } from '@/ui/components';
@@ -144,7 +145,6 @@ export function Checkout() {
   const navigate = useNavigate();
   const { cart, getCartTotals, showToast, clearCart, isAuthed, couponCode, refreshCart } = useApp();
   const t = getCartTotals();
-  const fmt = (n: number) => 'Rs ' + n.toLocaleString('en-IN');
   const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod>('razorpay');
   const [form, setForm] = useState<CheckoutForm>(initialCheckoutForm);
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -526,7 +526,7 @@ export function Checkout() {
                         checked={row.blouse_stitching}
                         onChange={(event) => update({ blouse_stitching: event.target.checked })}
                       />
-                      Blouse stitching · Rs {BLOUSE_STITCH_FEE}
+                      Blouse stitching · {fmt(BLOUSE_STITCH_FEE)}
                     </label>
                     {row.blouse_stitching && (
                       <label className="catalog-control">
@@ -542,7 +542,7 @@ export function Checkout() {
                         checked={row.fall_pico}
                         onChange={(event) => update({ fall_pico: event.target.checked })}
                       />
-                      Fall &amp; pico · Rs {FALL_PICO_FEE}
+                      Fall &amp; pico · {fmt(FALL_PICO_FEE)}
                     </label>
                   </div>
                 );
@@ -567,7 +567,7 @@ export function Checkout() {
                 <input type="checkbox" checked={useLoyalty} onChange={event => setUseLoyalty(event.target.checked)} />
                 <span>
                   <strong>Use loyalty points</strong>
-                  <small>{loyaltyBalance.toLocaleString('en-IN')} points available. Redeem Rs {loyaltyToUse.toLocaleString('en-IN')} on this order.</small>
+                  <small>{loyaltyBalance.toLocaleString('en-IN')} points available. Redeem {fmt(loyaltyToUse)} on this order.</small>
                 </span>
               </label>
             )}

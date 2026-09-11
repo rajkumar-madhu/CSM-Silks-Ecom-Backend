@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { inr as fmt } from '@/lib/money';
 import { useCatalogLiveRefresh } from '@/lib/useCatalogLiveRefresh';
 import { ProductVisual } from '@/ui/components';
 import { useApp } from '@/store/AppContext';
@@ -12,7 +13,6 @@ export function Cart() {
   const [applying, setApplying] = useState(false);
   const [stockNotice, setStockNotice] = useState('');
   const totals = getCartTotals();
-  const fmt = (n: number) => 'Rs ' + n.toLocaleString('en-IN');
   const stockIssues = cart.filter(item => item.stock_status && item.stock_status !== 'ok');
   const hasStockIssues = stockIssues.length > 0;
   const cartVariantIds = useMemo(() => new Set(cart.map(item => item.variant_id).filter(Boolean) as number[]), [cart]);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, Clock3, ExternalLink, MessageCircle, PackageCheck, Phone, RefreshCw, Truck } from 'lucide-react';
 import { api } from '@/lib/api';
+import { inr } from '@/lib/money';
 import { STORE_PHONE_TEL, STORE_WHATSAPP_URL } from '@/lib/storeContact';
 import { ORDER_STATUS_LABEL, formatDateTime, latestTrackingEvent, lifecycleProgress, sortTrackingEvents } from '@/lib/orderLifecycle';
 import { connectOrderRealtime, type RealtimeStatus } from '@/lib/realtime';
@@ -180,7 +181,7 @@ export function Tracking() {
               <div className="track-pname">{first?.product_name || 'CSM Silks order'}</div>
               <div className="track-pmeta">Qty: {first?.quantity || 1} / {order.payment_method || 'payment'} / {order.payment_status || 'payment status pending'}</div>
             </div>
-            <div className="track-pprice">Rs {Number(order.total_amount).toLocaleString('en-IN')}</div>
+            <div className="track-pprice">{inr(order.total_amount)}</div>
           </div>
         </div>
 

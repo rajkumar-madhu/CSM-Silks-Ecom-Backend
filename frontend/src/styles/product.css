@@ -201,7 +201,7 @@
 }
 
 /* Discount share of the price line — kept inline beside the struck MRP so the
-   three values read as one unit (now Rs X / was Rs Y / -Z%). */
+   three values read as one unit (now ₹X / was ₹Y / -Z%). */
 .product-card--retail .product-price-off {
   color: var(--sale, #9a2b2b);
   font-size: 11px;

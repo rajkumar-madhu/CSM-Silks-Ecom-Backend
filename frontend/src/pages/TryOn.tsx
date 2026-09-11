@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, ShoppingCart, Sparkles } from 'lucide-react';
 import { api, resolveAssetUrl } from '@/lib/api';
+import { inr } from '@/lib/money';
 import { useApp } from '@/store/AppContext';
 import { ProductVisual } from '@/ui/components';
 import type { Product } from '@/types';
@@ -246,7 +247,7 @@ export function TryOn() {
                     <div>
                       <span>This saree</span>
                       <strong>{suggestedProduct.name}</strong>
-                      <small>Rs {Number(suggestedProduct.price).toLocaleString('en-IN')}</small>
+                      <small>{inr(suggestedProduct.price)}</small>
                     </div>
                   </div>
                 )}

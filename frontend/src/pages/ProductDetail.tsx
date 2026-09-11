@@ -29,6 +29,7 @@ import {
 import { ProductStickyBar } from '@/components/ProductStickyBar';
 import { ProductCard } from '@/features/catalog/components/ProductCard';
 import { api, isImageAssetUrl } from '@/lib/api';
+import { inr } from '@/lib/money';
 import { productWhatsAppUrl } from '@/lib/storeContact';
 import { buildVariantImageMap, getProductImageList } from '@/lib/productImages';
 import { useCatalogLiveRefresh } from '@/lib/useCatalogLiveRefresh';
@@ -435,7 +436,7 @@ export function ProductDetail() {
   const offers = [
     p.deal_label || 'Special price',
     'Extra 5% off on prepaid orders',
-    'Free shipping above Rs 999',
+    'Free shipping above ₹999',
     `${p.return_days || 15}-day easy returns`,
   ];
 
@@ -605,8 +606,8 @@ export function ProductDetail() {
 
             <div className="pd-price-panel">
               <div className="pd-price-row">
-                <div className="pd-price">Rs {activePrice.toLocaleString('en-IN')}</div>
-                {activeMrp > activePrice && <div className="pd-mrp">Rs {activeMrp.toLocaleString('en-IN')}</div>}
+                <div className="pd-price">{inr(activePrice)}</div>
+                {activeMrp > activePrice && <div className="pd-mrp">{inr(activeMrp)}</div>}
                 {disc > 0 && <div className="pd-off">{disc}% OFF</div>}
               </div>
               <div className="pd-tax-note">Inclusive of all taxes</div>
@@ -696,7 +697,7 @@ export function ProductDetail() {
                           onClick={() => setSelectedLength(option.key)}
                           aria-pressed={option.key === activeLength.key}
                         >
-                          {option.key} Meters{delta > 0 ? ` + Rs ${delta.toLocaleString('en-IN')}` : ''}
+                          {option.key} Meters{delta > 0 ? ` + ${inr(delta)}` : ''}
                         </button>
                       );
                     })}
@@ -773,7 +774,7 @@ export function ProductDetail() {
                 {etaMin > 0 && etaMax > 0 && (
                   <span><Truck size={14} /> Usually delivered in {etaMin}–{etaMax} days</span>
                 )}
-                <span><CreditCard size={14} /> Free delivery on orders above Rs 999</span>
+                <span><CreditCard size={14} /> Free delivery on orders above ₹999</span>
               </div>
               {delivery?.serviceable && (
                 <div className="pd-delivery-perks">
@@ -1042,7 +1043,7 @@ export function ProductDetail() {
                     <div className="pd-trust-item">
                       <Truck size={20} />
                       <strong>Free shipping</strong>
-                      <span>On orders above Rs 999</span>
+                      <span>On orders above ₹999</span>
                     </div>
                     <div className="pd-trust-item">
                       <RotateCcw size={20} />
@@ -1141,7 +1142,7 @@ export function ProductDetail() {
                       style={isImageAssetUrl(imageList[0]) ? { backgroundImage: `url(${imageList[0]})` } : { background: imageList[0] }}
                     />
                     <span className="pd-fbt-name">{p.name}</span>
-                    <span className="pd-fbt-price">Rs {activePrice.toLocaleString('en-IN')}</span>
+                    <span className="pd-fbt-price">{inr(activePrice)}</span>
                     <span className="pd-fbt-this">This item</span>
                   </div>
                   {bundleAddOns.map(item => {
@@ -1161,7 +1162,7 @@ export function ProductDetail() {
                           style={isImageAssetUrl(cover) ? { backgroundImage: `url(${cover})` } : { background: cover || 'var(--surface-2)' }}
                         />
                         <span className="pd-fbt-name">{item.name}</span>
-                        <span className="pd-fbt-price">Rs {Number(item.price || 0).toLocaleString('en-IN')}</span>
+                        <span className="pd-fbt-price">{inr(item.price)}</span>
                       </label>
                     );
                   })}
@@ -1169,8 +1170,8 @@ export function ProductDetail() {
                 <div className="pd-fbt-foot">
                   <div className="pd-fbt-total">
                     <span>Total for {bundleChosen.length + 1} item{bundleChosen.length ? 's' : ''}</span>
-                    <strong>Rs {bundleTotal.toLocaleString('en-IN')}</strong>
-                    {bundleSaving > 0 && <em>You save Rs {bundleSaving.toLocaleString('en-IN')}</em>}
+                    <strong>{inr(bundleTotal)}</strong>
+                    {bundleSaving > 0 && <em>You save {inr(bundleSaving)}</em>}
                   </div>
                   <button type="button" className="pd-fbt-add" onClick={() => void addBundleToCart()} disabled={!canPurchase}>
                     <ShoppingBag size={16} /> Add {bundleChosen.length + 1} to Bag

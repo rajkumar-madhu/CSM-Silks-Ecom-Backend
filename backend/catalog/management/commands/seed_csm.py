@@ -469,7 +469,7 @@ class Command(BaseCommand):
             self._seed_reviews(product, customer)
 
         rewards = [
-            ("Rs 200 Off Coupon", "Next order discount", 2000, "discount", "200.00"),
+            ("₹200 Off Coupon", "Next order discount", 2000, "discount", "200.00"),
             ("Free Blouse Stitching", "Expert tailoring included", 1500, "service", "750.00"),
             ("Priority Shipping", "Fast dispatch upgrade", 800, "service", "150.00"),
         ]

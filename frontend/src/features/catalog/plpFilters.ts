@@ -2,6 +2,8 @@
 // single source of truth: parse/serialize must round-trip so links are shareable and
 // back/forward navigation restores the exact view.
 
+import { inr } from '@/lib/money';
+
 // Must match ATTRIBUTE_PARAMS in backend/catalog/selectors.py. This is the *default* set of
 // URL params `parsePlpParams` treats as attribute groups — a positive allowlist, not a blocklist
 // of "everything else". A caller with live facets (see CatalogPlp.tsx) passes ATTRIBUTE_KEYS
@@ -154,10 +156,6 @@ export function plpTotalLabel(total: number | null, loading: boolean): string {
   return (total ?? 0).toLocaleString('en-IN');
 }
 
-function formatInr(value: string): string {
-  return `₹${Number(value).toLocaleString('en-IN')}`;
-}
-
 export interface PlpChip {
   key: string;
   label: string;
@@ -175,10 +173,10 @@ export function activePlpChips(state: PlpFilterState): PlpChip[] {
   }
   if (state.minPrice || state.maxPrice) {
     const label = state.minPrice && state.maxPrice
-      ? `${formatInr(state.minPrice)} - ${formatInr(state.maxPrice)}`
+      ? `${inr(state.minPrice)} - ${inr(state.maxPrice)}`
       : state.maxPrice
-        ? `Under ${formatInr(state.maxPrice)}`
-        : `Above ${formatInr(state.minPrice)}`;
+        ? `Under ${inr(state.maxPrice)}`
+        : `Above ${inr(state.minPrice)}`;
     chips.push({ key: 'price', label, next: { ...state, minPrice: '', maxPrice: '' } });
   }
   if (state.discountMin) {

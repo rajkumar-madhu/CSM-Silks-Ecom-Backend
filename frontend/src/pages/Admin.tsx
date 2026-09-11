@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
+import { inr as formatAdminMoney } from '@/lib/money';
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -174,10 +175,6 @@ function defaultWorkflowForm(order: Order): WorkflowPayload {
     location: order.status === 'out_for_delivery' ? 'Customer delivery area' : 'CSM Kanchipuram operations',
     note: defaultWorkflowNote(action),
   };
-}
-
-function formatAdminMoney(value: number | string | undefined) {
-  return `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
 }
 
 function formatAdminNumber(value: number | string | undefined) {
@@ -877,7 +874,7 @@ function AdminOrderTable({ orders, onWorkflow, onInvoice }: { orders: AdminOrder
                   <span className={`status-badge ${adminStatusClass(row.status)}`}>{ORDER_STATUS_LABEL[order.status] || row.status}</span>
                 </div>
                 <div className="admin-order-meta-grid">
-                  <span>Total <b>Rs {Number(row.total || row.total_amount || 0).toLocaleString('en-IN')}</b></span>
+                  <span>Total <b>{formatAdminMoney(row.total || row.total_amount || 0)}</b></span>
                   <span>Courier <b>{order.courier_name || 'Pending'}</b></span>
                   <span>AWB <b>{order.tracking_number || 'Not created'}</b></span>
                 </div>
@@ -935,7 +932,7 @@ function AdminOrderTable({ orders, onWorkflow, onInvoice }: { orders: AdminOrder
           <tr key={o.id}>
             <td>{o.order_number}</td>
             <td>{o.customer || o.shipping_address_snapshot?.full_name || '-'}</td>
-            <td>Rs {Number(o.total || o.total_amount || 0).toLocaleString('en-IN')}</td>
+            <td>{formatAdminMoney(o.total || o.total_amount || 0)}</td>
             <td><span className={`status-badge ${adminStatusClass(o.status)}`}>{ORDER_STATUS_LABEL[o.status as Order['status']] || o.status}</span></td>
             <td>{o.created_at ? new Date(o.created_at).toLocaleDateString('en-IN') : '-'}</td>
             <td>
@@ -1105,7 +1102,7 @@ function AdminShipments() {
         </div>
         <label className="admin-field wide">Order
           <select value={form.order} onChange={e => setForm({ ...form, order: e.target.value })}>
-            {orders.map(order => <option key={order.id} value={order.id}>{order.order_number} - Rs {Number(order.total_amount).toLocaleString('en-IN')}</option>)}
+            {orders.map(order => <option key={order.id} value={order.id}>{order.order_number} - {formatAdminMoney(order.total_amount)}</option>)}
           </select>
         </label>
         <div className="admin-form-grid">
@@ -1315,7 +1312,7 @@ function AdminCoupons() {
             <input type="checkbox" checked={form.is_active} onChange={e => setForm({ ...form, is_active: e.target.checked })} />
           </label>
           <label className="admin-field wide">Description
-            <textarea rows={3} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Launch offer for orders above Rs 1000" />
+            <textarea rows={3} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Launch offer for orders above ₹1000" />
           </label>
         </div>
         {notice && <div className={`admin-alert ${notice.includes('Unable') || notice.includes('required') ? 'bad' : 'good'}`}>{notice}</div>}
@@ -1333,8 +1330,8 @@ function AdminCoupons() {
               <div>
                 <strong>{coupon.code}</strong>
                 <span>
-                  {coupon.discount_type === 'percent' ? `${Number(coupon.value).toLocaleString('en-IN')}% off` : `Rs ${Number(coupon.value).toLocaleString('en-IN')} off`}
-                  {' '}above Rs {Number(coupon.min_order_value).toLocaleString('en-IN')}
+                  {coupon.discount_type === 'percent' ? `${Number(coupon.value).toLocaleString('en-IN')}% off` : `${formatAdminMoney(coupon.value)} off`}
+                  {' '}above {formatAdminMoney(coupon.min_order_value)}
                 </span>
                 <span className="admin-muted-line">
                   Used {coupon.used_count}{coupon.usage_limit ? ` / ${coupon.usage_limit}` : ''} times. {coupon.description || 'No description'}
@@ -1475,7 +1472,7 @@ function AdminCustomers() {
           <thead><tr><th>Name</th><th>Phone</th><th>Orders</th><th>Spent</th><th>Tier</th></tr></thead>
           <tbody>
             {customers.map(c => (
-              <tr key={c.id}><td>{c.name}</td><td>{c.phone || c.email}</td><td>{c.orders}</td><td>Rs {Number(c.spent || 0).toLocaleString('en-IN')}</td><td>{c.tier}</td></tr>
+              <tr key={c.id}><td>{c.name}</td><td>{c.phone || c.email}</td><td>{c.orders}</td><td>{formatAdminMoney(c.spent)}</td><td>{c.tier}</td></tr>
             ))}
             {customers.length === 0 && (
               <tr><td colSpan={5}><div className="admin-empty-row">No customers yet. They appear after the first order.</div></td></tr>
@@ -1739,7 +1736,7 @@ function AdminUnsold() {
           <thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Days</th><th>Capital</th><th>Severity</th></tr></thead>
           <tbody>
             {(data?.items || []).map((u) => (
-              <tr key={u.id}><td>{u.product_name}</td><td>{u.sku}</td><td>{u.stock_qty}</td><td>{u.days_unsold}</td><td>Rs {Number(u.capital_blocked).toLocaleString('en-IN')}</td><td>{u.severity}</td></tr>
+              <tr key={u.id}><td>{u.product_name}</td><td>{u.sku}</td><td>{u.stock_qty}</td><td>{u.days_unsold}</td><td>{formatAdminMoney(u.capital_blocked)}</td><td>{u.severity}</td></tr>
             ))}
           </tbody>
         </table>
