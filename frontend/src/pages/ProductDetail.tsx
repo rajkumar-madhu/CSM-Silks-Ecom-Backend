@@ -433,11 +433,14 @@ export function ProductDetail() {
   );
   const bundleSaving = Math.max(0, Math.round(bundleMrpTotal - bundleTotal));
 
+  // Each offer carries a note saying *how* it applies, because the four of them reach
+  // the shopper at different moments: one is already in the price, one only lands at
+  // payment, and two are store policy. A flat list made them look interchangeable.
   const offers = [
-    p.deal_label || 'Special price',
-    'Extra 5% off on prepaid orders',
-    'Free shipping above ₹999',
-    `${p.return_days || 15}-day easy returns`,
+    { key: 'deal', Icon: Tag, title: p.deal_label || 'Special price', note: 'Already applied to this price' },
+    { key: 'prepaid', Icon: CreditCard, title: 'Extra 5% off on prepaid orders', note: 'Applied at payment' },
+    { key: 'shipping', Icon: Truck, title: 'Free shipping above ₹999', note: 'Pan-India' },
+    { key: 'returns', Icon: RotateCcw, title: `${p.return_days || 15}-day easy returns`, note: 'From the day it is delivered' },
   ];
 
   // `p.attribute_labels` is server-driven and lists every typed-attribute label —
@@ -870,7 +873,13 @@ export function ProductDetail() {
               <h2 className="pd-rail-title">Offers</h2>
               <ul className="pd-rail-offers">
                 {(showAllOffers ? offers : offers.slice(0, 3)).map(offer => (
-                  <li key={offer}><Tag size={14} /> <span>{offer}</span></li>
+                  <li key={offer.key}>
+                    <offer.Icon size={14} />
+                    <div>
+                      <strong>{offer.title}</strong>
+                      <span>{offer.note}</span>
+                    </div>
+                  </li>
                 ))}
               </ul>
               {offers.length > 3 && (
