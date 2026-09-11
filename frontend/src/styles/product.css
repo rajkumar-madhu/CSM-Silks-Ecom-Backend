@@ -2920,6 +2920,23 @@
   font-size: 11.5px;
   font-weight: 600;
 }
+/* The code a shopper types at checkout. Boxed and letter-spaced so it reads as a
+   value to copy rather than more prose, and selectable — there is no copy button
+   here yet, so the text itself has to be grabbable. */
+.pd-offer-code {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border: 1px dashed var(--gold);
+  border-radius: var(--radius-sm);
+  background: rgba(179, 126, 40, 0.08);
+  color: var(--gold);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  user-select: all;
+}
 .pd-rail-offers li svg {
   flex: 0 0 auto;
   margin-top: 2px;

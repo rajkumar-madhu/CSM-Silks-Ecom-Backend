@@ -15,10 +15,10 @@ from loyalty.models import LoyaltyTransaction
 from notifications.models import Notification
 from datetime import timedelta
 
-from orders.pricing import calculate_coupon_discount, calculate_gst, calculate_loyalty_points
+from orders.pricing import calculate_coupon_discount, calculate_gst, calculate_loyalty_points, effective_loyalty_rate
 from django.db.models import F
 
-from orders.models import Coupon, Order, OrderItem, ReturnRequest
+from orders.models import Coupon, Offer, Order, OrderItem, ReturnRequest
 from orders.services import _restock_order_items, _restock_variant
 from orders.views import render_invoice_html
 from payments.models import Payment
@@ -771,3 +771,102 @@ class RestockUsesDatabaseArithmeticTests(TestCase):
         self.assertEqual(product.total_sold, 0)
         variant.refresh_from_db()
         self.assertEqual(variant.stock_qty, 5)
+
+
+@override_settings(LOYALTY_POINTS_PER_RUPEE=0.05, SECURE_SSL_REDIRECT=False)
+class OfferTests(TestCase):
+    """The coins kind changes what a shopper is owed, so the award and the quoted
+    rate have to move together. Everything here guards that pair."""
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_no_offers_leaves_the_base_rate_and_award_alone(self):
+        self.assertEqual(effective_loyalty_rate(), Decimal("0.05"))
+        self.assertEqual(calculate_loyalty_points(Decimal("21999.00")), 1099)
+
+    def test_live_coins_offer_is_paid_not_just_advertised(self):
+        Offer.objects.create(
+            kind=Offer.Kind.COINS, title="2x CSM Coins this week",
+            coins_multiplier=Decimal("2.00"), is_active=True,
+        )
+        self.assertEqual(effective_loyalty_rate(), Decimal("0.10"))
+        # The whole point: the award doubles alongside the quote.
+        self.assertEqual(calculate_loyalty_points(Decimal("21999.00")), 2199)
+
+    def test_expired_or_future_coins_offer_pays_nothing_extra(self):
+        now = timezone.now()
+        Offer.objects.create(
+            kind=Offer.Kind.COINS, title="Last week", coins_multiplier=Decimal("3.00"),
+            expires_at=now - timedelta(days=1),
+        )
+        Offer.objects.create(
+            kind=Offer.Kind.COINS, title="Next week", coins_multiplier=Decimal("3.00"),
+            starts_at=now + timedelta(days=1),
+        )
+        Offer.objects.create(
+            kind=Offer.Kind.COINS, title="Switched off", coins_multiplier=Decimal("3.00"),
+            is_active=False,
+        )
+        self.assertEqual(effective_loyalty_rate(), Decimal("0.05"))
+
+    def test_best_live_multiplier_wins(self):
+        Offer.objects.create(kind=Offer.Kind.COINS, title="2x", coins_multiplier=Decimal("2.00"))
+        Offer.objects.create(kind=Offer.Kind.COINS, title="3x", coins_multiplier=Decimal("3.00"))
+        self.assertEqual(effective_loyalty_rate(), Decimal("0.15"))
+
+    def test_coupon_offer_stops_advertising_a_code_its_coupon_has_lapsed(self):
+        coupon = Coupon.objects.create(
+            code="CSM10", discount_type=Coupon.DiscountType.PERCENT, value=Decimal("10.00"),
+            min_order_value=Decimal("15000.00"), is_active=True,
+        )
+        offer = Offer.objects.create(kind=Offer.Kind.COUPON, title="Save 10%", coupon=coupon)
+        self.assertEqual(offer.code, "CSM10")
+
+        coupon.is_active = False
+        coupon.save(update_fields=["is_active"])
+        offer.refresh_from_db()
+        self.assertEqual(offer.code, "")
+
+        coupon.is_active = True
+        coupon.expires_at = timezone.now() - timedelta(hours=1)
+        coupon.save(update_fields=["is_active", "expires_at"])
+        offer.refresh_from_db()
+        self.assertEqual(offer.code, "")
+
+    def test_endpoint_serves_live_offers_and_the_matching_rate(self):
+        Offer.objects.create(kind=Offer.Kind.BANK, title="HDFC card", note="10% up to Rs 2,000", sort_order=1)
+        Offer.objects.create(kind=Offer.Kind.COINS, title="2x coins", coins_multiplier=Decimal("2.00"), sort_order=2)
+        Offer.objects.create(kind=Offer.Kind.BANK, title="Switched off", is_active=False)
+
+        response = self.client.get("/api/offers")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual([o["title"] for o in body["offers"]], ["HDFC card", "2x coins"])
+        # Served, never multiplied on the client.
+        self.assertAlmostEqual(body["loyalty_points_per_rupee"], 0.10)
+
+    def test_endpoint_is_open_to_signed_out_shoppers(self):
+        self.assertEqual(self.client.get("/api/offers").status_code, 200)
+
+    def test_admin_rejects_a_coins_offer_that_pays_nothing(self):
+        admin = User.objects.create_user(
+            username="offer-admin", email="offer-admin@example.com", password="pw123456", is_staff=True
+        )
+        self.client.force_authenticate(user=admin)
+        response = self.client.post(
+            "/api/admin/offers", {"kind": "coins", "title": "2x coins"}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("coins_multiplier", response.json())
+
+    def test_admin_rejects_a_coupon_offer_with_no_coupon(self):
+        admin = User.objects.create_user(
+            username="offer-admin-2", email="offer-admin2@example.com", password="pw123456", is_staff=True
+        )
+        self.client.force_authenticate(user=admin)
+        response = self.client.post(
+            "/api/admin/offers", {"kind": "coupon", "title": "Save 10%"}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("coupon", response.json())

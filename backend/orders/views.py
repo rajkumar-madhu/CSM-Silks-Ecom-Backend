@@ -8,14 +8,15 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
 from accounts.permissions import IsStaffAdmin
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from analytics.audit import record_admin_audit
 from payments.services import razorpay_checkout_configured
-from .models import Coupon, Order, ReturnRequest
-from .serializers import AdminOrderStatusSerializer, AdminOrderWorkflowSerializer, AdminReturnStatusSerializer, CouponSerializer, OrderCreateSerializer, OrderSerializer, PublicOrderTrackingSerializer, ReturnCreateSerializer, ReturnSerializer
+from .models import Coupon, Offer, Order, ReturnRequest
+from .serializers import AdminOrderStatusSerializer, AdminOrderWorkflowSerializer, AdminReturnStatusSerializer, CouponSerializer, OfferSerializer, OrderCreateSerializer, OrderSerializer, PublicOrderTrackingSerializer, ReturnCreateSerializer, ReturnSerializer
+from .pricing import effective_loyalty_rate
 from .services import cancel_order, confirm_paid_order, create_order_from_cart, create_return_request, update_return_status, validate_admin_status_change, validate_admin_workflow_action
 from shipping.models import Shipment
 from shipping.shiprocket import ShiprocketError
@@ -361,6 +362,72 @@ class AdminReturnDetailView(APIView):
             metadata={"order_id": ret.order_id, "status": ret.status},
         )
         return Response(ReturnSerializer(ret).data)
+
+
+class OfferListView(APIView):
+    """Live offers for the storefront, plus the coins rate they add up to.
+
+    The rate ships with the offers rather than being multiplied on the client: a page
+    that did its own arithmetic would be a second place for the quote to drift from
+    what checkout actually credits.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        offers = Offer.objects.live().select_related("coupon")
+        return Response(
+            {
+                "offers": OfferSerializer(offers, many=True).data,
+                "loyalty_points_per_rupee": float(effective_loyalty_rate()),
+            }
+        )
+
+
+class AdminOfferListCreateView(APIView):
+    permission_classes = [IsStaffAdmin]
+
+    def get(self, request):
+        offers = Offer.objects.select_related("coupon").all()
+        return Response(OfferSerializer(offers, many=True).data)
+
+    def post(self, request):
+        serializer = OfferSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        offer = serializer.save()
+        record_admin_audit(
+            request,
+            action="offer.create",
+            entity=offer,
+            summary=f"Offer {offer.title} created.",
+            metadata={"kind": offer.kind},
+        )
+        return Response(OfferSerializer(offer).data, status=status.HTTP_201_CREATED)
+
+
+class AdminOfferDetailView(APIView):
+    permission_classes = [IsStaffAdmin]
+
+    def patch(self, request, offer_id: int):
+        offer = get_object_or_404(Offer, id=offer_id)
+        serializer = OfferSerializer(offer, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        offer = serializer.save()
+        record_admin_audit(
+            request,
+            action="offer.update",
+            entity=offer,
+            summary=f"Offer {offer.title} updated.",
+            metadata={"kind": offer.kind, "is_active": offer.is_active},
+        )
+        return Response(OfferSerializer(offer).data)
+
+    def delete(self, request, offer_id: int):
+        offer = get_object_or_404(Offer, id=offer_id)
+        title = offer.title
+        offer.delete()
+        record_admin_audit(request, action="offer.delete", entity=None, summary=f"Offer {title} deleted.")
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AdminCouponListCreateView(APIView):

@@ -45,7 +45,7 @@ import {
 } from '@/lib/variants';
 import { useApp } from '@/store/AppContext';
 import { SpinViewer } from '@/ui/components';
-import type { Product, ProductReview } from '@/types';
+import type { Offer, Product, ProductReview } from '@/types';
 
 type PdTab = 'details' | 'specs' | 'care' | 'shipping' | 'reviews';
 
@@ -76,6 +76,9 @@ export function ProductDetail() {
   const [bundleOff, setBundleOff] = useState<number[]>([]);
   const [fabricOptions, setFabricOptions] = useState<string[]>([]);
   const [showAllOffers, setShowAllOffers] = useState(false);
+  const [liveOffers, setLiveOffers] = useState<Offer[]>([]);
+  // null until /api/offers answers; the product payload's rate stands in meanwhile.
+  const [offerCoinRate, setOfferCoinRate] = useState<number | null>(null);
   const thumbRailRef = useRef<HTMLDivElement | null>(null);
   const {
     pinCode,
@@ -211,6 +214,26 @@ export function ProductDetail() {
   // Silk type is a product-level attribute, not a per-variant switch, so the other
   // silk types are browse links rather than selectors. Sourced from the same facets
   // endpoint the listing page filters by; a failure just leaves the active chip alone.
+  useEffect(() => {
+    let cancelled = false;
+    api.offers.list()
+      .then(data => {
+        if (cancelled) return;
+        setLiveOffers(data.offers || []);
+        setOfferCoinRate(Number(data.loyalty_points_per_rupee) || null);
+      })
+      .catch(() => {
+        // A promotions outage must not take the buy box with it: the card falls back
+        // to store policy and the coins line to the rate on the product payload.
+        if (cancelled) return;
+        setLiveOffers([]);
+        setOfferCoinRate(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const facetGender = product?.gender;
   useEffect(() => {
     if (!facetGender) return;
@@ -390,7 +413,9 @@ export function ProductDetail() {
   // Coins are quoted with the server's own rate and the same truncation
   // orders/pricing.py applies, so the promise on the PDP is the credit at checkout.
   // No rate on the payload (older API) means no claim is made at all.
-  const coinRate = Number(p.loyalty_points_per_rupee || 0);
+  // The offers endpoint's rate already includes any live coins multiplier and is the
+  // same helper checkout awards from, so it wins over the product payload's base rate.
+  const coinRate = offerCoinRate ?? Number(p.loyalty_points_per_rupee || 0);
   const coinsEarned = coinRate > 0 ? Math.floor(activePrice * coinRate) : 0;
 
   // Active silk type first, then the rest of the catalogue's silk types as browse
@@ -433,15 +458,33 @@ export function ProductDetail() {
   );
   const bundleSaving = Math.max(0, Math.round(bundleMrpTotal - bundleTotal));
 
-  // Each offer carries a note saying *how* it applies, because the four of them reach
-  // the shopper at different moments: one is already in the price, one only lands at
-  // payment, and two are store policy. A flat list made them look interchangeable.
-  const offers = [
-    { key: 'deal', Icon: Tag, title: p.deal_label || 'Special price', note: 'Already applied to this price' },
-    { key: 'prepaid', Icon: CreditCard, title: 'Extra 5% off on prepaid orders', note: 'Applied at payment' },
-    { key: 'shipping', Icon: Truck, title: 'Free shipping above ₹999', note: 'Pan-India' },
-    { key: 'returns', Icon: RotateCcw, title: `${p.return_days || 15}-day easy returns`, note: 'From the day it is delivered' },
+  // Each offer carries a note saying *how* it applies, because they reach the shopper
+  // at different moments: one is already in the price, one only lands at payment, and
+  // some are store policy. A flat list made them look interchangeable.
+  const OFFER_ICON: Record<Offer['kind'], typeof Tag> = {
+    coupon: Tag,
+    bank: CreditCard,
+    coins: Sparkles,
+    shipping: Truck,
+  };
+
+  // What the store is actually running right now. When it is running nothing — or the
+  // endpoint is down — the card states policy rather than going blank.
+  const policyOffers = [
+    { key: 'deal', Icon: Tag, title: p.deal_label || 'Special price', note: 'Already applied to this price', code: '' },
+    { key: 'prepaid', Icon: CreditCard, title: 'Extra 5% off on prepaid orders', note: 'Applied at payment', code: '' },
+    { key: 'shipping', Icon: Truck, title: 'Free shipping above ₹999', note: 'Pan-India', code: '' },
+    { key: 'returns', Icon: RotateCcw, title: `${p.return_days || 15}-day easy returns`, note: 'From the day it is delivered', code: '' },
   ];
+  const offers = liveOffers.length
+    ? liveOffers.map(offer => ({
+        key: `offer-${offer.id}`,
+        Icon: OFFER_ICON[offer.kind] || Tag,
+        title: offer.title,
+        note: offer.note,
+        code: offer.code,
+      }))
+    : policyOffers;
 
   // `p.attribute_labels` is server-driven and lists every typed-attribute label —
   // including ones this product leaves null — so a key with a typed home never gets
@@ -877,7 +920,8 @@ export function ProductDetail() {
                     <offer.Icon size={14} />
                     <div>
                       <strong>{offer.title}</strong>
-                      <span>{offer.note}</span>
+                      {offer.note && <span>{offer.note}</span>}
+                      {offer.code && <code className="pd-offer-code">{offer.code}</code>}
                     </div>
                   </li>
                 ))}

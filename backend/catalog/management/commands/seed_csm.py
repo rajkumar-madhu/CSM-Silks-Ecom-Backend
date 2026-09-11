@@ -11,7 +11,7 @@ from catalog.migrations._attribute_backfill import FABRIC_MAP, WORK_MAP, ZARI_MA
 from catalog.models import AttributeOption, Category, Product, ProductImage, ProductVariant
 from inventory.models import StockLedger
 from loyalty.models import LoyaltyReward
-from orders.models import Coupon
+from orders.models import Coupon, Offer
 from reviews.models import ProductReview
 
 User = get_user_model()
@@ -493,6 +493,43 @@ class Command(BaseCommand):
                     "min_order_value": min_order_value,
                     "is_active": True,
                 },
+            )
+
+        # Offers are what the product page advertises. The coupon one points at the
+        # CSM10 row above rather than restating the code, so switching that coupon off
+        # stops the page offering it. No coins offer is seeded on purpose: the coins
+        # kind multiplies what checkout actually credits, and seed data should not
+        # quietly change anyone's loyalty awards.
+        csm10 = Coupon.objects.filter(code="CSM10").first()
+        offers = [
+            {
+                "kind": Offer.Kind.BANK,
+                "title": "10% instant discount on HDFC cards",
+                "note": "Up to ₹2,000 on orders above ₹5,000",
+                "sort_order": 1,
+            },
+            {
+                "kind": Offer.Kind.COUPON,
+                "title": "10% off for new customers",
+                "note": "Apply at checkout",
+                "coupon": csm10,
+                "sort_order": 2,
+            },
+            {
+                "kind": Offer.Kind.SHIPPING,
+                "title": "Free shipping above ₹999",
+                "note": "Pan-India",
+                "sort_order": 3,
+            },
+        ]
+        for offer in offers:
+            if offer["kind"] == Offer.Kind.COUPON and not offer.get("coupon"):
+                continue
+            # Keyed on the slot, not the title: seeds get re-run against existing dev
+            # databases, and keying on copy meant editing a title added a second row
+            # instead of updating the first.
+            Offer.objects.update_or_create(
+                kind=offer["kind"], sort_order=offer["sort_order"], defaults=offer
             )
 
         self.stdout.write(self.style.SUCCESS("Seeded CSM Silks Django retailer data."))

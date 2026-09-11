@@ -4,7 +4,43 @@ from rest_framework import serializers
 
 from catalog.serializers import ProductListSerializer
 
-from .models import Coupon, Order, OrderItem, ReturnRequest
+from .models import Coupon, Offer, Order, OrderItem, ReturnRequest
+
+
+class OfferSerializer(serializers.ModelSerializer):
+    # Read-only, and resolved through the Coupon: see Offer.code for why an offer
+    # whose coupon has lapsed advertises no code at all.
+    code = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = Offer
+        fields = [
+            "id",
+            "kind",
+            "title",
+            "note",
+            "code",
+            "coupon",
+            "coins_multiplier",
+            "sort_order",
+            "starts_at",
+            "expires_at",
+            "is_active",
+        ]
+
+    def validate(self, attrs):
+        kind = attrs.get("kind", getattr(self.instance, "kind", None))
+        coupon = attrs.get("coupon", getattr(self.instance, "coupon", None))
+        multiplier = attrs.get("coins_multiplier", getattr(self.instance, "coins_multiplier", None))
+        if kind == Offer.Kind.COUPON and not coupon:
+            raise serializers.ValidationError({"coupon": "A coupon offer must point at a coupon."})
+        if kind == Offer.Kind.COINS and not multiplier:
+            raise serializers.ValidationError(
+                {"coins_multiplier": "A coins offer must set the multiplier it pays."}
+            )
+        if multiplier is not None and multiplier <= 0:
+            raise serializers.ValidationError({"coins_multiplier": "The multiplier must be positive."})
+        return attrs
 
 
 class CouponSerializer(serializers.ModelSerializer):

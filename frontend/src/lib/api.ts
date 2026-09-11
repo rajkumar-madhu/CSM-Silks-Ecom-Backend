@@ -2,6 +2,7 @@ import type {
   Address,
   AdminAuditLog,
   AdminCoupon,
+  AdminOffer,
   AdminReview,
   AdminProductQuickCreatePayload,
   AdminInsights,
@@ -15,6 +16,7 @@ import type {
   DeliveryCheck,
   AppNotification,
   LoyaltyReward,
+  OffersResponse,
   Order,
   PaginatedResponse,
   Product,
@@ -285,6 +287,10 @@ function queryString(params?: QueryParams) {
 
 export const api = {
   tokens: { getAccessToken, getRefreshToken, setTokens, clearTokens, refreshAccessToken, ensureFreshAccessToken, hasStoredSession },
+
+  offers: {
+    list: () => request<OffersResponse>('/offers'),
+  },
 
   products: {
     list: async (params?: Record<string, string | number | boolean | undefined>) => {
@@ -587,6 +593,19 @@ export const api = {
     },
     unsold: () => request<UnsoldResponse>('/admin/unsold-alerts'),
     coupons: () => request<AdminCoupon[]>('/admin/coupons'),
+    offers: () => request<AdminOffer[]>('/admin/offers'),
+    createOffer: (data: Partial<AdminOffer>) =>
+      request<AdminOffer>('/admin/offers', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    updateOffer: (offerId: number, data: Partial<AdminOffer>) =>
+      request<AdminOffer>(`/admin/offers/${offerId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    deleteOffer: (offerId: number) =>
+      request<void>(`/admin/offers/${offerId}`, { method: 'DELETE' }),
     createCoupon: (data: Partial<AdminCoupon>) =>
       request<AdminCoupon>('/admin/coupons', {
         method: 'POST',
