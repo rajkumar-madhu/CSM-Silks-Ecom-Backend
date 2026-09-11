@@ -1788,14 +1788,19 @@
     cursor: pointer;
   }
 
+  /* The two fills the desktop buy box already uses. These were #ff9f00/#fb641b —
+     hard-coded Flipkart orange, the one place the storefront dropped its palette. */
   .pd-sticky-cart {
-    background: #ff9f00;
-    color: #111;
+    background: var(--green);
+    color: #fff;
   }
 
   .pd-sticky-buy {
-    background: #fb641b;
-    color: #fff;
+    /* Literal ink, not var(--ink): --ink is the *text* colour and inverts to
+       near-white in dark, while the gold gradient does not, so a token here
+       would paint cream on gold. Same reason as the .pd-btn-buy rule below. */
+    background: linear-gradient(135deg, var(--gold), var(--gold-2));
+    color: #14100d;
   }
 
   .pd-sticky-buy:disabled {
@@ -3374,6 +3379,12 @@
 [data-theme="dark"] .pd-cta-row .pd-btn-cart:hover:not(:disabled) {
   background: var(--green-2);
   color: #fff;
+}
+
+/* The gold gradient is the same in both themes, so its label must be too. Left to
+   var(--ink) it inverts to near-white in dark and reads cream-on-gold. */
+[data-theme="dark"] .pd-btn-buy {
+  color: #14100d;
 }
 
 @media (max-width: 1200px) {
