@@ -1,0 +1,133 @@
+# CSM Silks — Production deploy
+#
+# Runs only after CI has gone green on the same commit, and ships that exact SHA
+# rather than whatever main happens to point at by the time this starts.
+#
+# The API container already runs `check --deploy`, `migrate` and `collectstatic`
+# on start (see docker-compose.prod.yml), so a deploy is: put the code on the
+# host, rebuild, recreate, and prove the thing came back up.
+#
+# Repository secrets this needs, all under Settings → Secrets → Actions:
+#
+#   DEPLOY_HOST         the server's hostname or IP
+#   DEPLOY_USER         the SSH user that owns the checkout
+#   DEPLOY_SSH_KEY      that user's *private* key, whole file including headers
+#   DEPLOY_PATH         absolute path to the git checkout on the host
+#   DEPLOY_KNOWN_HOSTS  output of: ssh-keyscan -H <your-host>
+#   DEPLOY_HEALTH_URL   e.g. https://csmsilks.com/api/health
+#
+# DEPLOY_KNOWN_HOSTS is deliberately required rather than running ssh-keyscan
+# here. Scanning at deploy time trusts whatever answers on the day, which is the
+# thing host-key checking exists to prevent; pinning it once is a one-off cost.
+
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA to deploy (defaults to current main)"
+        required: false
+
+# One deploy at a time. A queued run is not cancelled mid-flight — half-applied
+# migrations are worse than waiting.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Ship to production
+    runs-on: ubuntu-latest
+    # A manual run is trusted; an automatic one only follows a green CI.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    environment: production
+
+    steps:
+      - name: Resolve the commit to deploy
+        id: target
+        # Through env, never interpolated into the script body: `inputs.sha` is
+        # attacker-controlled text and `${{ }}` splices it in before bash parses.
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          REF_SHA: ${{ github.sha }}
+        run: |
+          sha="${INPUT_SHA:-${RUN_SHA:-$REF_SHA}}"
+          case "$sha" in
+            *[!0-9a-fA-F]* | "") echo "::error::Not a commit SHA: '$sha'"; exit 1 ;;
+          esac
+          if [ "${#sha}" -lt 7 ]; then
+            echo "::error::SHA too short to be unambiguous: '$sha'"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Open an SSH session to the host
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$SSH_KEY" ] || [ -z "$KNOWN_HOSTS" ]; then
+            echo "::error::DEPLOY_SSH_KEY and DEPLOY_KNOWN_HOSTS must both be set. See the header of this workflow."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Build and recreate the stack
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER_NAME: ${{ secrets.DEPLOY_USER }}
+          APP_PATH: ${{ secrets.DEPLOY_PATH }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$USER_NAME@$HOST" bash -eu -o pipefail -s <<EOF
+            cd "$APP_PATH"
+
+            # Deploy the exact commit CI tested, not the tip of a moving branch.
+            git fetch --prune origin
+            git checkout --detach "$SHA"
+
+            # --build because both the API image and the frontend bundle are built
+            # on the host; the frontend_build service writes into the nginx volume.
+            docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+
+            # Old images accumulate fast when every deploy rebuilds. Dangling only,
+            # so nothing still referenced by a running container is touched.
+            docker image prune -f
+          EOF
+
+      - name: Wait for the site to answer
+        env:
+          HEALTH_URL: ${{ secrets.DEPLOY_HEALTH_URL }}
+        run: |
+          if [ -z "$HEALTH_URL" ]; then
+            echo "::error::DEPLOY_HEALTH_URL is not set, so this deploy cannot be verified."
+            exit 1
+          fi
+          # The API container's own healthcheck allows a 60s start period, and
+          # migrations run before it serves, so give it room before calling it.
+          for attempt in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$HEALTH_URL" || true)
+            if [ "$code" = "200" ]; then
+              echo "Healthy after ${attempt} attempt(s)."
+              exit 0
+            fi
+            echo "attempt ${attempt}: HTTP ${code:-no response}"
+            sleep 15
+          done
+          echo "::error::$HEALTH_URL never returned 200. The stack is up but not serving — check 'docker compose -f docker-compose.prod.yml logs api' on the host."
+          exit 1
+
+      - name: Report what shipped
+        run: echo "Deployed ${{ steps.target.outputs.sha }} to production."
