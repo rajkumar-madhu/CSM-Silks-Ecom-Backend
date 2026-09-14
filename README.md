@@ -69,3 +69,30 @@ cd ../frontend && npm run build
 For a production deploy check, run with `DEBUG=False`, a long `SECRET_KEY`, real `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, and `CSRF_TRUSTED_ORIGINS`. When `DEBUG=False`, the backend now defaults to HTTPS redirect, secure cookies, HSTS, and forwarded-proto support unless explicitly overridden.
 
 The deploy check also fails fast if production is still wired to SQLite, in-memory realtime, missing Redis/Celery broker settings, missing Razorpay credentials/webhook secret, no live OTP channel, or no customer notification channel. `docker-compose.prod.yml` runs `python backend/manage.py check --deploy` before migrations so a bad production environment stops before serving traffic.
+
+## Deploying
+
+`.github/workflows/deploy.yml` ships to production. It fires after CI goes green on `main`,
+deploys that exact commit (not the tip of the branch, which may have moved), and fails the run
+if the site does not answer afterwards. `workflow_dispatch` deploys a chosen SHA by hand.
+
+There is nothing to run locally: the API container does `check --deploy`, `migrate` and
+`collectstatic` on start, so the deploy is a rebuild and recreate of the compose stack.
+
+Six repository secrets are required, under **Settings → Secrets and variables → Actions**:
+
+| Secret | What it holds |
+|---|---|
+| `DEPLOY_HOST` | the server's hostname or IP |
+| `DEPLOY_USER` | the SSH user owning the checkout |
+| `DEPLOY_SSH_KEY` | that user's private key, whole file including headers |
+| `DEPLOY_PATH` | absolute path to the git checkout on the host |
+| `DEPLOY_KNOWN_HOSTS` | output of `ssh-keyscan -H <your-host>` |
+| `DEPLOY_HEALTH_URL` | e.g. `https://csmsilks.com/api/health` |
+
+`DEPLOY_KNOWN_HOSTS` is required rather than running `ssh-keyscan` inside the job: scanning at
+deploy time trusts whatever answers on the day, which is the thing host-key checking exists to
+prevent. Pin it once.
+
+The job declares `environment: production`, so required reviewers or a wait timer can be added
+in **Settings → Environments** to gate deploys behind a human.

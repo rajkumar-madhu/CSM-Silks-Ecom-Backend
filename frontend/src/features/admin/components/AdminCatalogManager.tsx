@@ -13,6 +13,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { inr } from '@/lib/money';
 import { useCatalogLiveRefresh } from '@/lib/useCatalogLiveRefresh';
 import { ProductVisual } from '@/ui/components';
 import { editFormFromProduct, primaryVariantId, type AdminEditForm } from '@/lib/adminCatalog';
@@ -70,8 +71,6 @@ const initialProductForm: ProductForm = {
   is_featured: true,
   blouse_included: true,
 };
-
-const inr = (value?: number | string) => `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
 
 function toSlug(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');

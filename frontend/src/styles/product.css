@@ -201,7 +201,7 @@
 }
 
 /* Discount share of the price line — kept inline beside the struck MRP so the
-   three values read as one unit (now Rs X / was Rs Y / -Z%). */
+   three values read as one unit (now ₹X / was ₹Y / -Z%). */
 .product-card--retail .product-price-off {
   color: var(--sale, #9a2b2b);
   font-size: 11px;
@@ -1788,14 +1788,19 @@
     cursor: pointer;
   }
 
+  /* The two fills the desktop buy box already uses. These were #ff9f00/#fb641b —
+     hard-coded Flipkart orange, the one place the storefront dropped its palette. */
   .pd-sticky-cart {
-    background: #ff9f00;
-    color: #111;
+    background: var(--green);
+    color: #fff;
   }
 
   .pd-sticky-buy {
-    background: #fb641b;
-    color: #fff;
+    /* Literal ink, not var(--ink): --ink is the *text* colour and inverts to
+       near-white in dark, while the gold gradient does not, so a token here
+       would paint cream on gold. Same reason as the .pd-btn-buy rule below. */
+    background: linear-gradient(135deg, var(--gold), var(--gold-2));
+    color: #14100d;
   }
 
   .pd-sticky-buy:disabled {
@@ -1930,10 +1935,25 @@
 @media (max-width: 860px) {
   .pd-media-shell {
     grid-template-columns: 1fr;
+    gap: 14px;
   }
 
-  .pd-thumbs {
+  /* Flatten the stage so the main image, thumbnails, and meta card are siblings in the shell
+   * grid; `order` only reorders siblings, so this is what makes image -> thumbs -> meta work. */
+  .pd-media-stage {
+    display: contents;
+  }
+
+  .pd-main-img {
+    order: 1;
+  }
+
+  /* .pd-thumbs is wrapped in .pd-thumb-col now, so the shell's grid child — and
+     therefore the thing `order` has to move — is the wrapper, not the rail. */
+  .pd-thumb-col {
     order: 2;
+  }
+  .pd-thumbs {
     flex-direction: row;
     overflow-x: auto;
     padding-bottom: 2px;
@@ -2502,4 +2522,918 @@
   .pd-trust { gap: 6px; padding: 14px 6px; }
   .pd-trust-item strong { font-size: 11px; letter-spacing: 0.3px; }
   .pd-trust-item span { font-size: 10.5px; }
+}
+
+/* ============================================================
+   PDP v2 — three-column product page
+   Gallery | buy box | help rail, with a tabbed body underneath.
+   Everything below overrides the single-column rules above, so it
+   must stay at the end of this file.
+   ============================================================ */
+
+.pd-shell {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 22px 4vw 80px;
+}
+
+/* The grid is now purely a grid — the page gutter lives on .pd-shell so the
+   breadcrumb and the tabbed body below line up with the columns. */
+.pd-grid {
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, 1fr) 300px;
+  gap: 34px;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pd-breadcrumb {
+  margin-bottom: 16px;
+}
+.pd-crumb-current {
+  max-width: 44ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- identity row -------------------------------------------------------- */
+
+.pd-id-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.pd-exclusive {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border: 1px solid rgba(179, 126, 40, 0.32);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(223, 175, 83, 0.2), rgba(179, 126, 40, 0.12));
+  color: var(--gold);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+.pd-sku-tag {
+  margin-left: auto;
+  color: var(--soft);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.pd-title {
+  margin: 8px 0 6px;
+  font-size: 38px;
+  line-height: 1.12;
+}
+.pd-subtitle {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.pd-rating-count {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.pd-rating-jump {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* --- coins --------------------------------------------------------------- */
+
+.pd-coins {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 12px 0 4px;
+  padding: 10px 14px;
+  border: 1px solid rgba(11, 108, 72, 0.2);
+  border-radius: var(--radius);
+  background: rgba(11, 108, 72, 0.07);
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 700;
+}
+.pd-coin-mark {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--gold-2), var(--gold));
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.45);
+}
+
+/* --- colour + option chips ---------------------------------------------- */
+
+.pd-color.has-img {
+  width: 46px;
+  height: 58px;
+  border-radius: var(--radius-sm);
+  background-size: cover;
+  background-position: center;
+}
+.pd-color.has-img.on {
+  box-shadow: 0 0 0 2px var(--gold);
+}
+.pd-color-more {
+  min-width: 46px;
+  height: 58px;
+  padding: 0 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.pd-color-more:hover {
+  border-color: var(--gold-2);
+  color: var(--ink);
+}
+
+.pd-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pd-opt {
+  padding: 9px 15px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.pd-opt:hover {
+  border-color: var(--gold-2);
+}
+.pd-opt.on {
+  border-color: var(--gold);
+  background: rgba(179, 126, 40, 0.1);
+  font-weight: 800;
+}
+
+/* --- gallery overlays ---------------------------------------------------- */
+
+.pd-main-img {
+  position: relative;
+}
+.pd-media-badge {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+.pd-media-wish {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-fast);
+}
+.pd-media-wish:hover {
+  color: var(--ruby);
+  transform: scale(1.06);
+}
+.pd-media-wish.on {
+  color: var(--ruby);
+  border-color: var(--ruby);
+}
+
+/* --- delivery facts ------------------------------------------------------ */
+
+.pd-delivery-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.pd-delivery-facts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* --- three-button CTA row ------------------------------------------------ */
+
+.pd-cta-row.pd-desktop-cta {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  gap: 10px;
+  /* The buy box is no longer one long scrolling column, so the CTA sits in flow
+     under the delivery card. Left sticky it pinned itself over that card, and
+     small screens already get the dedicated ProductStickyBar. */
+  position: static;
+}
+.pd-cta-row .pd-btn-wish,
+.pd-cta-row .pd-btn-cart,
+.pd-cta-row .pd-btn-buy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: auto;
+  margin: 0;
+  flex: none;
+  white-space: nowrap;
+}
+.pd-cta-row .pd-btn-wish.on {
+  border-color: var(--ruby);
+  background: rgba(122, 27, 45, 0.08);
+}
+
+/* --- right help rail ----------------------------------------------------- */
+
+.pd-rail {
+  position: sticky;
+  top: var(--header-chrome);
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.pd-rail-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.pd-rail-title {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.pd-rail-ai {
+  border-color: rgba(179, 126, 40, 0.3);
+  background: linear-gradient(180deg, rgba(255, 250, 242, 0.98) 0%, rgba(246, 239, 226, 0.94) 100%);
+  text-align: center;
+}
+.pd-rail-ai-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--gold);
+}
+.pd-rail-ai-head strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+}
+.pd-rail-new {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--ruby);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+.pd-rail-ai p {
+  margin: 10px 0 14px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.pd-rail-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--gold), var(--gold-2));
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.pd-rail-cta:hover {
+  background: linear-gradient(135deg, var(--gold-2), #ffdf85);
+  box-shadow: 0 8px 22px rgba(179, 126, 40, 0.26);
+}
+.pd-rail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+.pd-rail-chips button {
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.pd-rail-chips button:hover {
+  border-color: var(--gold-2);
+  color: var(--ink);
+}
+
+.pd-rail-offers {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pd-rail-offers li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.pd-rail-offers li div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+/* Ink, not --green: the dark theme resolves --green to #12785c, which lands around
+   3.4:1 on the dark surface. The green stays on the icon beside it. */
+.pd-rail-offers li strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.pd-rail-offers li span {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+/* The code a shopper types at checkout. Boxed and letter-spaced so it reads as a
+   value to copy rather than more prose, and selectable — there is no copy button
+   here yet, so the text itself has to be grabbable. */
+.pd-offer-code {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border: 1px dashed var(--gold);
+  border-radius: var(--radius-sm);
+  background: rgba(179, 126, 40, 0.08);
+  color: var(--gold);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  user-select: all;
+}
+.pd-rail-offers li svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--green);
+}
+.pd-rail-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pd-rail-trust {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 10px;
+}
+.pd-rail-trust div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.pd-rail-trust svg {
+  color: var(--gold);
+}
+
+/* --- tabbed body + suggestions ------------------------------------------ */
+
+.pd-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 34px;
+  margin-top: 44px;
+  align-items: start;
+}
+.pd-bottom-main {
+  min-width: 0;
+}
+/* No suggestions for this product — don't hold a column open for nothing. */
+.pd-bottom.solo {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pd-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+  scrollbar-width: none;
+}
+.pd-tabs::-webkit-scrollbar {
+  display: none;
+}
+.pd-tab {
+  flex: 0 0 auto;
+  padding: 12px 16px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.pd-tab:hover {
+  color: var(--ink);
+}
+.pd-tab.on {
+  border-bottom-color: var(--gold);
+  color: var(--ink);
+  font-weight: 800;
+}
+.pd-tab-panel {
+  padding-top: 20px;
+}
+.pd-tab-panel .pd-section-lbl:first-child {
+  margin-top: 0;
+}
+.pd-care p {
+  margin: 0 0 16px;
+  color: var(--ink);
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+.pd-ship .pd-attrs {
+  margin-top: 18px;
+}
+.pd-review-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+/* Inside the tab column the rail is the whole width of its own column. */
+.pd-related {
+  margin: 0;
+  max-width: none;
+  padding: 0;
+}
+
+/* --- frequently bought together ----------------------------------------- */
+
+.pd-fbt {
+  margin-top: 32px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.pd-fbt h2 {
+  margin: 0 0 16px;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 17px;
+  font-weight: 800;
+}
+.pd-fbt-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.pd-fbt-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 148px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--page);
+}
+.pd-fbt-pick {
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.pd-fbt-pick:hover {
+  border-color: var(--gold-2);
+}
+.pd-fbt-pick.on {
+  border-color: var(--gold);
+  background: rgba(179, 126, 40, 0.06);
+}
+.pd-fbt-pick input {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+.pd-fbt-img {
+  height: 110px;
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-2);
+  background-size: cover;
+  background-position: center;
+}
+.pd-fbt-name {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.pd-fbt-price {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+.pd-fbt-this {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+.pd-fbt-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.pd-fbt-total {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.pd-fbt-total span {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.pd-fbt-total strong {
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 800;
+}
+.pd-fbt-total em {
+  color: var(--success);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-style: normal;
+}
+.pd-fbt-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--gold-2);
+  font-size: 13.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.pd-fbt-add:hover {
+  background: var(--ink-2);
+  color: #fff;
+}
+.pd-fbt-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- dark theme ---------------------------------------------------------- */
+
+[data-theme="dark"] .pd-rail-ai {
+  background: linear-gradient(180deg, rgba(36, 31, 26, 0.96) 0%, rgba(26, 23, 20, 0.94) 100%);
+}
+[data-theme="dark"] .pd-media-wish,
+[data-theme="dark"] .pd-color-more,
+[data-theme="dark"] .pd-opt,
+[data-theme="dark"] .pd-rail-chips button {
+  background: var(--surface-2);
+}
+[data-theme="dark"] .pd-fbt-item {
+  background: var(--surface-2);
+}
+[data-theme="dark"] .pd-coins {
+  background: rgba(22, 168, 113, 0.12);
+}
+
+/* --ink is the text colour, so it inverts to near-white in dark and these solid
+   "ink" buttons would read as pale-on-pale. Gold-tinted fills keep the bag
+   buttons legible while leaving Buy Now the only solid-gold call to action. */
+[data-theme="dark"] .pd-cta-row .pd-btn-cart,
+[data-theme="dark"] .pd-fbt-add {
+  border: 1px solid rgba(232, 192, 106, 0.5);
+  background: rgba(232, 192, 106, 0.14);
+  color: var(--gold-2);
+}
+[data-theme="dark"] .pd-cta-row .pd-btn-cart:hover:not(:disabled),
+[data-theme="dark"] .pd-fbt-add:hover:not(:disabled) {
+  background: rgba(232, 192, 106, 0.24);
+  color: var(--gold-2);
+}
+
+/* --- responsive ---------------------------------------------------------- */
+
+@media (max-width: 1200px) {
+  /* The help rail is supporting content — it drops under the buy box before the
+     gallery and buy box are allowed to narrow. */
+  .pd-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .pd-rail {
+    position: static;
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .pd-rail-card {
+    flex: 1 1 260px;
+  }
+  .pd-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .pd-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 26px;
+  }
+  .pd-gallery {
+    position: static;
+  }
+  .pd-title {
+    font-size: 30px;
+  }
+}
+
+@media (max-width: 620px) {
+  .pd-shell {
+    padding: 14px 4vw 90px;
+  }
+  .pd-cta-row.pd-desktop-cta {
+    grid-template-columns: auto 1fr;
+  }
+  .pd-cta-row .pd-btn-buy {
+    grid-column: 1 / -1;
+  }
+  .pd-rail-trust {
+    grid-template-columns: 1fr 1fr;
+  }
+  .pd-fbt-item {
+    width: calc(50% - 6px);
+  }
+  .pd-sku-tag {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+/* ============================================================
+   PDP v2 — fidelity pass against the supplied design
+   ============================================================ */
+
+/* The buy box states its options in sentence case ("Color: Royal Blue"), not the
+   tracked-out uppercase the section headers elsewhere on the page use. */
+.pd-opt-lbl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 20px 0 10px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.pd-opt-lbl span {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* The design sets the price straight on the page rather than in a tinted card. */
+.pd-price-panel {
+  margin-top: 16px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.pd-price {
+  font-size: 34px;
+  color: var(--ink);
+}
+.pd-off {
+  color: var(--danger);
+}
+
+/* --- thumbnail rail scroll controls -------------------------------------- */
+
+.pd-thumb-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.pd-thumb-col .pd-thumbs {
+  scrollbar-width: none;
+}
+@media (min-width: 861px) {
+  /* Without a cap the column simply grows and the chevrons have nothing to
+     scroll. Capped so five thumbs overflow, which is the count that reveals them. */
+  .pd-thumb-col .pd-thumbs {
+    max-height: 520px;
+    overflow-y: auto;
+  }
+  .pd-thumb-col .pd-thumb {
+    flex: 0 0 auto;
+  }
+}
+.pd-thumb-col .pd-thumbs::-webkit-scrollbar {
+  display: none;
+}
+.pd-thumb-nav {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.pd-thumb-nav:hover {
+  border-color: var(--gold-2);
+  color: var(--ink);
+}
+
+/* --- CTA: the design's bag button is deep green, not ink ----------------- */
+
+.pd-cta-row .pd-btn-cart {
+  background: var(--green);
+  color: #fff;
+}
+.pd-cta-row .pd-btn-cart:hover:not(:disabled) {
+  background: var(--green-2);
+  color: #fff;
+}
+
+/* --- help rail: white card, dark button ---------------------------------- */
+
+.pd-rail-ai {
+  border-color: var(--line);
+  background: var(--surface);
+}
+.pd-rail-cta {
+  background: var(--green);
+  color: #fff;
+}
+.pd-rail-cta:hover {
+  background: var(--green-2);
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(10, 82, 67, 0.24);
+}
+
+/* Four trust marks across, as the design lays them out. That needs a slightly
+   wider rail and tighter type, or "100% Pure Silk Assured" breaks to three lines. */
+.pd-grid {
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, 1fr) 324px;
+}
+.pd-rail-trust {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px 4px;
+}
+.pd-rail-trust div {
+  gap: 5px;
+  font-size: 9.5px;
+  line-height: 1.3;
+  letter-spacing: -0.1px;
+}
+.pd-rail-trust svg {
+  width: 16px;
+  height: 16px;
+}
+
+[data-theme="dark"] .pd-rail-ai {
+  background: var(--surface);
+}
+[data-theme="dark"] .pd-cta-row .pd-btn-cart {
+  border: 0;
+  background: var(--green);
+  color: #fff;
+}
+[data-theme="dark"] .pd-cta-row .pd-btn-cart:hover:not(:disabled) {
+  background: var(--green-2);
+  color: #fff;
+}
+
+/* The gold gradient is the same in both themes, so its label must be too. Left to
+   var(--ink) it inverts to near-white in dark and reads cream-on-gold. */
+[data-theme="dark"] .pd-btn-buy {
+  color: #14100d;
+}
+
+@media (max-width: 1200px) {
+  /* Side by side in the wide rail row, the four marks get cramped. */
+  .pd-rail-trust {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 860px) {
+  /* Touch scrolling already covers the horizontal row; the arrows would only take
+     up space. Declared here rather than in the earlier breakpoint block so it wins
+     on source order against the base `display: grid`. */
+  .pd-thumb-col .pd-thumb-nav {
+    display: none;
+  }
 }

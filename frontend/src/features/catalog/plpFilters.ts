@@ -2,6 +2,8 @@
 // single source of truth: parse/serialize must round-trip so links are shareable and
 // back/forward navigation restores the exact view.
 
+import { inr } from '@/lib/money';
+
 // Must match ATTRIBUTE_PARAMS in backend/catalog/selectors.py. This is the *default* set of
 // URL params `parsePlpParams` treats as attribute groups — a positive allowlist, not a blocklist
 // of "everything else". A caller with live facets (see CatalogPlp.tsx) passes ATTRIBUTE_KEYS
@@ -137,12 +139,21 @@ export function toggleListValue(list: string[], value: string): string[] {
   return list.includes(value) ? list.filter(item => item !== value) : [...list, value];
 }
 
-function titleCase(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+/** Human label for a URL slug ("daily-wear" -> "Daily Wear"). Shared by the chip row and the
+ *  PLP heading/breadcrumb so a category with no facet label reads the same everywhere. */
+export function slugToLabel(value: string): string {
+  return value
+    .split('-')
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
-function formatInr(value: string): string {
-  return `₹${Number(value).toLocaleString('en-IN')}`;
+/** Result-count text shared by the sort bar and the discovery pill. Only the very first load
+ *  (no count known yet) reads as loading; a refetch keeps the last known count on screen. */
+export function plpTotalLabel(total: number | null, loading: boolean): string {
+  if (loading && total === null) return 'Loading…';
+  return (total ?? 0).toLocaleString('en-IN');
 }
 
 export interface PlpChip {
@@ -158,14 +169,14 @@ export interface PlpChip {
 export function activePlpChips(state: PlpFilterState): PlpChip[] {
   const chips: PlpChip[] = [];
   if (state.category) {
-    chips.push({ key: `category:${state.category}`, label: titleCase(state.category), next: { ...state, category: '' } });
+    chips.push({ key: `category:${state.category}`, label: slugToLabel(state.category), next: { ...state, category: '' } });
   }
   if (state.minPrice || state.maxPrice) {
     const label = state.minPrice && state.maxPrice
-      ? `${formatInr(state.minPrice)} - ${formatInr(state.maxPrice)}`
+      ? `${inr(state.minPrice)} - ${inr(state.maxPrice)}`
       : state.maxPrice
-        ? `Under ${formatInr(state.maxPrice)}`
-        : `Above ${formatInr(state.minPrice)}`;
+        ? `Under ${inr(state.maxPrice)}`
+        : `Above ${inr(state.minPrice)}`;
     chips.push({ key: 'price', label, next: { ...state, minPrice: '', maxPrice: '' } });
   }
   if (state.discountMin) {

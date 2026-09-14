@@ -108,7 +108,7 @@ def validate_refund_amount(*, payment, amount: Decimal) -> Decimal:
         raise PaymentReconciliationError("Only captured payments can be refunded.")
     remaining = money(payment.amount - payment.refunded_amount)
     if amount > remaining:
-        raise PaymentReconciliationError(f"Refund amount exceeds remaining refundable balance of Rs {remaining}.")
+        raise PaymentReconciliationError(f"Refund amount exceeds remaining refundable balance of ₹{remaining}.")
     return amount
 
 
@@ -137,9 +137,9 @@ def apply_refund_reconciliation(*, payment, amount: Decimal, refund_id: str = ""
         order.save(update_fields=["status", "updated_at"])
 
     description = (
-        f"Full refund of Rs {payment.refunded_amount} recorded."
+        f"Full refund of ₹{payment.refunded_amount} recorded."
         if full_refund
-        else f"Partial refund of Rs {amount} recorded. Remaining refundable balance Rs {money(payment.amount - payment.refunded_amount)}."
+        else f"Partial refund of ₹{amount} recorded. Remaining refundable balance ₹{money(payment.amount - payment.refunded_amount)}."
     )
     record_tracking_event(order, ShipmentEvent.Status.REFUNDED, description=description, raw_payload={"source": source, "refund_id": refund_id})
     create_notification(

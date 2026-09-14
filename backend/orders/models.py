@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from accounts.models import Address
 from catalog.models import Product, ProductVariant
@@ -30,6 +31,81 @@ class Coupon(models.Model):
 
     def __str__(self) -> str:
         return self.code
+
+
+class OfferQuerySet(models.QuerySet):
+    def live(self):
+        """Active and inside its window. A row with no window is always in it."""
+        now = timezone.now()
+        return (
+            self.filter(is_active=True)
+            .filter(models.Q(starts_at__isnull=True) | models.Q(starts_at__lte=now))
+            .filter(models.Q(expires_at__isnull=True) | models.Q(expires_at__gte=now))
+        )
+
+
+class Offer(models.Model):
+    """A promotion the storefront advertises, as distinct from the discount itself.
+
+    Coupon is the redeemable thing: a code, a value, the rules checkout enforces. An
+    Offer is how a promotion is *presented* on the product page, and a coupon-kind
+    Offer points at its Coupon rather than restating the code and terms, so the card
+    can never advertise a code that checkout has expired or deactivated.
+
+    COINS is the one kind that changes what a shopper is owed, so it is not display
+    text: calculate_loyalty_points multiplies by the live multiplier, and the rate the
+    product page quotes comes from the same helper. A coins offer nobody honours would
+    be exactly the drift loyalty_points_per_rupee was added to prevent.
+    """
+
+    class Kind(models.TextChoices):
+        COUPON = "coupon", "Coupon code"
+        BANK = "bank", "Bank or card offer"
+        COINS = "coins", "Loyalty coins"
+        SHIPPING = "shipping", "Shipping"
+
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    title = models.CharField(max_length=120)
+    note = models.CharField(max_length=180, blank=True)
+    coupon = models.ForeignKey(
+        Coupon, null=True, blank=True, on_delete=models.SET_NULL, related_name="offers"
+    )
+    # Only read for COINS. 2.00 means a shopper earns twice the usual coins.
+    coins_multiplier = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True
+    )
+    sort_order = models.PositiveIntegerField(default=0)
+    starts_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = OfferQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.get_kind_display()}: {self.title}"
+
+    @property
+    def code(self) -> str:
+        """The coupon code a shopper types, or "" when this offer needs no code.
+
+        Read through the Coupon so a deactivated or expired coupon stops being
+        advertised even if someone leaves the offer row switched on.
+        """
+        if self.kind != self.Kind.COUPON or not self.coupon:
+            return ""
+        if not self.coupon.is_active:
+            return ""
+        now = timezone.now()
+        if self.coupon.starts_at and self.coupon.starts_at > now:
+            return ""
+        if self.coupon.expires_at and self.coupon.expires_at < now:
+            return ""
+        return self.coupon.code
 
 
 class Order(models.Model):

@@ -94,6 +94,9 @@ export interface Product {
   review_count?: number;
   total_sold?: number;
   length_meters?: number | string | null;
+  /** Coins earned per rupee spent, served from the same setting checkout awards
+   *  from, so the PDP's "earn N coins" line cannot drift from the credit. */
+  loyalty_points_per_rupee?: number;
 }
 
 export interface AdminProductQuickCreatePayload {
@@ -325,6 +328,20 @@ export interface AdminCoupon {
   updated_at: string;
 }
 
+export interface AdminOffer {
+  id: number;
+  kind: 'coupon' | 'bank' | 'coins' | 'shipping';
+  title: string;
+  note: string;
+  code: string;
+  coupon: number | null;
+  coins_multiplier: string | null;
+  sort_order: number;
+  starts_at?: string | null;
+  expires_at?: string | null;
+  is_active: boolean;
+}
+
 export interface AdminAuditLog {
   id: number;
   user?: number | null;
@@ -523,4 +540,24 @@ export interface AdminInsights {
   top_products: Array<{ name: string; units: number; revenue: number | string }>;
   category_mix: Array<{ category: string; units: number; revenue: number | string }>;
   payment_mix: Array<{ method: string; label: string; count: number; amount: number | string }>;
+}
+
+/** A promotion the storefront advertises, served live from /api/offers. `code` is
+ *  resolved server-side through the coupon, so an offer whose coupon has lapsed
+ *  arrives with an empty code rather than one checkout would reject. */
+export interface Offer {
+  id: number;
+  kind: 'coupon' | 'bank' | 'coins' | 'shipping';
+  title: string;
+  note: string;
+  code: string;
+  coins_multiplier: string | null;
+  expires_at: string | null;
+}
+
+export interface OffersResponse {
+  offers: Offer[];
+  /** Includes any live coins multiplier. Served rather than multiplied on the client
+   *  so the quote cannot drift from what checkout credits. */
+  loyalty_points_per_rupee: number;
 }

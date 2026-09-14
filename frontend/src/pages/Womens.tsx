@@ -1,4 +1,5 @@
 import { CatalogPlp, type CatalogPlpQuickLink } from '@/features/catalog/CatalogPlp';
+import { DEFAULT_PLP_STATE } from '@/features/catalog/plpFilters';
 import type { PlpBannerSlide, PlpCategoryTile } from '@/features/catalog/components/PlpBanners';
 
 const SLIDES: PlpBannerSlide[] = [
@@ -48,7 +49,7 @@ const QUICK_LINKS: CatalogPlpQuickLink[] = [
   },
   {
     key: 'under-5000',
-    label: 'Under Rs 5,000',
+    label: 'Under ₹5,000',
     note: 'Daily wear and gifting picks',
     isActive: state => state.minPrice === '' && state.maxPrice === '5000',
     buildState: state => ({ ...state, minPrice: '', maxPrice: '5000' }),
@@ -76,7 +77,7 @@ const QUICK_LINKS: CatalogPlpQuickLink[] = [
     note: 'Latest drops at the top of the grid',
     isActive: state => state.sort === 'newest',
     buildState: state => ({ ...state, sort: 'newest' }),
-    clearState: state => ({ ...state, sort: 'popularity' }),
+    clearState: state => ({ ...state, sort: DEFAULT_PLP_STATE.sort }),
   },
 ];
 

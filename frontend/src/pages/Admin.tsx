@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
+import { inr as formatAdminMoney } from '@/lib/money';
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -28,6 +29,7 @@ import {
   ShoppingBag,
   Sparkles,
   Star,
+  Tag,
   TrendingUp,
   Truck,
   Users,
@@ -40,9 +42,9 @@ import { ADMIN_STATUS_CLASS, ORDER_STATUS_LABEL, formatDateTime, latestTrackingE
 import { useCatalogLiveRefresh } from '@/lib/useCatalogLiveRefresh';
 import { connectOrderRealtime, type RealtimeStatus } from '@/lib/realtime';
 import { useApp } from '@/store/AppContext';
-import type { AdminAuditLog, AdminCoupon, AdminInventoryRow, AdminReview, AdminShipment, Order, PaginatedResponse, ReturnRequest, User } from '@/types';
+import type { AdminAuditLog, AdminCoupon, AdminInventoryRow, AdminOffer, AdminReview, AdminShipment, Order, PaginatedResponse, ReturnRequest, User } from '@/types';
 
-type AdminPage = 'dashboard' | 'orders' | 'products' | 'inventory' | 'shipments' | 'coupons' | 'returns' | 'customers' | 'reports' | 'audit' | 'unsold' | 'reviews';
+type AdminPage = 'dashboard' | 'orders' | 'products' | 'inventory' | 'shipments' | 'coupons' | 'offers' | 'returns' | 'customers' | 'reports' | 'audit' | 'unsold' | 'reviews';
 type Kpis = Record<string, number | string>;
 type AdminOrderRow = Partial<Order> & {
   id: number;
@@ -70,6 +72,7 @@ const ADMIN_PAGE_HASH: Record<string, AdminPage> = {
   inventory: 'inventory',
   shipments: 'shipments',
   coupons: 'coupons',
+  offers: 'offers',
   returns: 'returns',
   customers: 'customers',
   reports: 'reports',
@@ -176,10 +179,6 @@ function defaultWorkflowForm(order: Order): WorkflowPayload {
   };
 }
 
-function formatAdminMoney(value: number | string | undefined) {
-  return `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
-}
-
 function formatAdminNumber(value: number | string | undefined) {
   return Number(value || 0).toLocaleString('en-IN');
 }
@@ -234,6 +233,7 @@ function buildNavGroups(badges: AdminBadgeCounts): Array<{ label: string; hint: 
         { key: 'inventory', label: 'Inventory', icon: PackageCheck },
         { key: 'unsold', label: 'Stock alerts', icon: AlertTriangle, badge: badgeFor(badges.unsold, 'alert', 'unresolved stock alerts') },
         { key: 'coupons', label: 'Coupons', icon: BadgePercent },
+        { key: 'offers', label: 'Offers', icon: Tag },
       ],
     },
     {
@@ -553,6 +553,7 @@ export function Admin() {
           {page === 'inventory' && <AdminInventory />}
           {page === 'shipments' && <AdminShipments />}
           {page === 'coupons' && <AdminCoupons />}
+          {page === 'offers' && <AdminOffers />}
           {page === 'returns' && <AdminReturns />}
           {page === 'customers' && <AdminCustomers />}
           {page === 'reviews' && <AdminReviews />}
@@ -877,7 +878,7 @@ function AdminOrderTable({ orders, onWorkflow, onInvoice }: { orders: AdminOrder
                   <span className={`status-badge ${adminStatusClass(row.status)}`}>{ORDER_STATUS_LABEL[order.status] || row.status}</span>
                 </div>
                 <div className="admin-order-meta-grid">
-                  <span>Total <b>Rs {Number(row.total || row.total_amount || 0).toLocaleString('en-IN')}</b></span>
+                  <span>Total <b>{formatAdminMoney(row.total || row.total_amount || 0)}</b></span>
                   <span>Courier <b>{order.courier_name || 'Pending'}</b></span>
                   <span>AWB <b>{order.tracking_number || 'Not created'}</b></span>
                 </div>
@@ -935,7 +936,7 @@ function AdminOrderTable({ orders, onWorkflow, onInvoice }: { orders: AdminOrder
           <tr key={o.id}>
             <td>{o.order_number}</td>
             <td>{o.customer || o.shipping_address_snapshot?.full_name || '-'}</td>
-            <td>Rs {Number(o.total || o.total_amount || 0).toLocaleString('en-IN')}</td>
+            <td>{formatAdminMoney(o.total || o.total_amount || 0)}</td>
             <td><span className={`status-badge ${adminStatusClass(o.status)}`}>{ORDER_STATUS_LABEL[o.status as Order['status']] || o.status}</span></td>
             <td>{o.created_at ? new Date(o.created_at).toLocaleDateString('en-IN') : '-'}</td>
             <td>
@@ -1105,7 +1106,7 @@ function AdminShipments() {
         </div>
         <label className="admin-field wide">Order
           <select value={form.order} onChange={e => setForm({ ...form, order: e.target.value })}>
-            {orders.map(order => <option key={order.id} value={order.id}>{order.order_number} - Rs {Number(order.total_amount).toLocaleString('en-IN')}</option>)}
+            {orders.map(order => <option key={order.id} value={order.id}>{order.order_number} - {formatAdminMoney(order.total_amount)}</option>)}
           </select>
         </label>
         <div className="admin-form-grid">
@@ -1222,6 +1223,189 @@ function formToCouponPayload(form: CouponForm): Partial<AdminCoupon> {
   };
 }
 
+const OFFER_KINDS: { value: AdminOffer['kind']; label: string }[] = [
+  { value: 'bank', label: 'Bank or card offer' },
+  { value: 'coupon', label: 'Coupon code' },
+  { value: 'coins', label: 'Loyalty coins' },
+  { value: 'shipping', label: 'Shipping' },
+];
+
+const emptyOfferForm = {
+  kind: 'bank' as AdminOffer['kind'],
+  title: '',
+  note: '',
+  coupon: '',
+  coins_multiplier: '',
+  sort_order: '0',
+  expires_at: '',
+  is_active: true,
+};
+
+function AdminOffers() {
+  const [offers, setOffers] = useState<AdminOffer[]>([]);
+  const [coupons, setCoupons] = useState<AdminCoupon[]>([]);
+  const [form, setForm] = useState(emptyOfferForm);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  const load = useCallback(() => {
+    return Promise.all([
+      api.admin.offers().then(setOffers).catch(() => setOffers([])),
+      // The coupon picker needs real rows: a coupon offer points at one rather than
+      // restating its code, so there is nothing sensible to type here by hand.
+      api.admin.coupons().then(setCoupons).catch(() => setCoupons([])),
+    ]);
+  }, []);
+
+  useEffect(() => { void Promise.resolve().then(load); }, [load]);
+
+  const resetForm = () => {
+    setEditingId(null);
+    setForm(emptyOfferForm);
+  };
+
+  const saveOffer = async () => {
+    if (!form.title.trim()) {
+      setNotice('A title is required.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload: Partial<AdminOffer> = {
+        kind: form.kind,
+        title: form.title.trim(),
+        note: form.note.trim(),
+        sort_order: Number(form.sort_order) || 0,
+        is_active: form.is_active,
+        coupon: form.kind === 'coupon' && form.coupon ? Number(form.coupon) : null,
+        coins_multiplier: form.kind === 'coins' && form.coins_multiplier ? form.coins_multiplier : null,
+        expires_at: form.expires_at || null,
+      };
+      const saved = editingId
+        ? await api.admin.updateOffer(editingId, payload)
+        : await api.admin.createOffer(payload);
+      setNotice(`${saved.title} ${editingId ? 'updated' : 'created'} successfully.`);
+      resetForm();
+      void load();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : 'Unable to save offer.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editOffer = (offer: AdminOffer) => {
+    setEditingId(offer.id);
+    setForm({
+      kind: offer.kind,
+      title: offer.title,
+      note: offer.note || '',
+      coupon: offer.coupon ? String(offer.coupon) : '',
+      coins_multiplier: offer.coins_multiplier || '',
+      sort_order: String(offer.sort_order ?? 0),
+      expires_at: offer.expires_at ? offer.expires_at.slice(0, 10) : '',
+      is_active: offer.is_active,
+    });
+  };
+
+  const toggleOffer = async (offer: AdminOffer) => {
+    setSaving(true);
+    try {
+      await api.admin.updateOffer(offer.id, { is_active: !offer.is_active });
+      setNotice(`${offer.title} ${offer.is_active ? 'paused' : 'activated'}.`);
+      void load();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : 'Unable to update offer.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const kindLabel = (kind: AdminOffer['kind']) =>
+    OFFER_KINDS.find(entry => entry.value === kind)?.label || kind;
+
+  return (
+    <div className="admin-create-grid compact">
+      <div className="admin-form-card">
+        <div className="chart-title"><Tag size={18} /> {editingId ? 'Edit offer' : 'Create offer'}</div>
+        <div className="admin-form-grid">
+          <label className="admin-field">Kind
+            <select value={form.kind} onChange={e => setForm({ ...form, kind: e.target.value as AdminOffer['kind'] })}>
+              {OFFER_KINDS.map(kind => <option key={kind.value} value={kind.value}>{kind.label}</option>)}
+            </select>
+          </label>
+          <label className="admin-field">Title
+            <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="10% instant discount on HDFC cards" />
+          </label>
+          {form.kind === 'coupon' && (
+            <label className="admin-field">Coupon
+              <select value={form.coupon} onChange={e => setForm({ ...form, coupon: e.target.value })}>
+                <option value="">Select a coupon</option>
+                {coupons.map(coupon => <option key={coupon.id} value={coupon.id}>{coupon.code}</option>)}
+              </select>
+            </label>
+          )}
+          {form.kind === 'coins' && (
+            <label className="admin-field">Coins multiplier
+              <input type="number" step="0.25" min="0" value={form.coins_multiplier} onChange={e => setForm({ ...form, coins_multiplier: e.target.value })} placeholder="2" />
+            </label>
+          )}
+          <label className="admin-field">Order
+            <input type="number" value={form.sort_order} onChange={e => setForm({ ...form, sort_order: e.target.value })} />
+          </label>
+          <label className="admin-field">Ends
+            <input type="date" value={form.expires_at} onChange={e => setForm({ ...form, expires_at: e.target.value })} />
+          </label>
+          <label className="admin-field coupon-active-field">
+            <span>Active</span>
+            <input type="checkbox" checked={form.is_active} onChange={e => setForm({ ...form, is_active: e.target.checked })} />
+          </label>
+          <label className="admin-field wide">Note
+            <input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} placeholder="Up to ₹2,000 on orders above ₹5,000" />
+          </label>
+        </div>
+        {notice && <div className={`admin-alert ${notice.includes('Unable') || notice.includes('required') ? 'bad' : 'good'}`}>{notice}</div>}
+        <div className="admin-row-actions coupon-form-actions">
+          <button className="admin-primary-btn" onClick={() => void saveOffer()} disabled={saving}>
+            {saving ? 'Saving...' : editingId ? 'Update offer' : 'Create offer'}
+          </button>
+          {editingId && <button onClick={resetForm}>Cancel</button>}
+        </div>
+        <p className="admin-muted-line">
+          A coins offer changes the points checkout actually credits, not just what the page
+          says. Only switch one on when the house means to pay it.
+        </p>
+      </div>
+
+      <div className="admin-form-card">
+        <div className="chart-title">Live on the product page</div>
+        <div className="admin-collection-list">
+          {offers.map(offer => (
+            <div key={offer.id} className="admin-collection-row coupon-row">
+              <div>
+                <strong>{offer.title}</strong>
+                <span>
+                  {kindLabel(offer.kind)}
+                  {offer.code ? ` · ${offer.code}` : ''}
+                  {offer.coins_multiplier ? ` · ${offer.coins_multiplier}× coins` : ''}
+                </span>
+                <span className="admin-muted-line">{offer.note || 'No note'}</span>
+              </div>
+              <span className={`status-badge ${offer.is_active ? 'st-delivered' : 'st-pending'}`}>{offer.is_active ? 'Active' : 'Paused'}</span>
+              <div className="admin-row-actions">
+                <button onClick={() => editOffer(offer)}>Edit</button>
+                <button onClick={() => void toggleOffer(offer)}>{offer.is_active ? 'Pause' : 'Activate'}</button>
+              </div>
+            </div>
+          ))}
+          {offers.length === 0 && <div className="admin-empty-row">No offers yet. The product page states store policy until one is live.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminCoupons() {
   const [coupons, setCoupons] = useState<AdminCoupon[]>([]);
   const [form, setForm] = useState<CouponForm>(emptyCouponForm);
@@ -1315,7 +1499,7 @@ function AdminCoupons() {
             <input type="checkbox" checked={form.is_active} onChange={e => setForm({ ...form, is_active: e.target.checked })} />
           </label>
           <label className="admin-field wide">Description
-            <textarea rows={3} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Launch offer for orders above Rs 1000" />
+            <textarea rows={3} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Launch offer for orders above ₹1000" />
           </label>
         </div>
         {notice && <div className={`admin-alert ${notice.includes('Unable') || notice.includes('required') ? 'bad' : 'good'}`}>{notice}</div>}
@@ -1333,8 +1517,8 @@ function AdminCoupons() {
               <div>
                 <strong>{coupon.code}</strong>
                 <span>
-                  {coupon.discount_type === 'percent' ? `${Number(coupon.value).toLocaleString('en-IN')}% off` : `Rs ${Number(coupon.value).toLocaleString('en-IN')} off`}
-                  {' '}above Rs {Number(coupon.min_order_value).toLocaleString('en-IN')}
+                  {coupon.discount_type === 'percent' ? `${Number(coupon.value).toLocaleString('en-IN')}% off` : `${formatAdminMoney(coupon.value)} off`}
+                  {' '}above {formatAdminMoney(coupon.min_order_value)}
                 </span>
                 <span className="admin-muted-line">
                   Used {coupon.used_count}{coupon.usage_limit ? ` / ${coupon.usage_limit}` : ''} times. {coupon.description || 'No description'}
@@ -1475,7 +1659,7 @@ function AdminCustomers() {
           <thead><tr><th>Name</th><th>Phone</th><th>Orders</th><th>Spent</th><th>Tier</th></tr></thead>
           <tbody>
             {customers.map(c => (
-              <tr key={c.id}><td>{c.name}</td><td>{c.phone || c.email}</td><td>{c.orders}</td><td>Rs {Number(c.spent || 0).toLocaleString('en-IN')}</td><td>{c.tier}</td></tr>
+              <tr key={c.id}><td>{c.name}</td><td>{c.phone || c.email}</td><td>{c.orders}</td><td>{formatAdminMoney(c.spent)}</td><td>{c.tier}</td></tr>
             ))}
             {customers.length === 0 && (
               <tr><td colSpan={5}><div className="admin-empty-row">No customers yet. They appear after the first order.</div></td></tr>
@@ -1739,7 +1923,7 @@ function AdminUnsold() {
           <thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Days</th><th>Capital</th><th>Severity</th></tr></thead>
           <tbody>
             {(data?.items || []).map((u) => (
-              <tr key={u.id}><td>{u.product_name}</td><td>{u.sku}</td><td>{u.stock_qty}</td><td>{u.days_unsold}</td><td>Rs {Number(u.capital_blocked).toLocaleString('en-IN')}</td><td>{u.severity}</td></tr>
+              <tr key={u.id}><td>{u.product_name}</td><td>{u.sku}</td><td>{u.stock_qty}</td><td>{u.days_unsold}</td><td>{formatAdminMoney(u.capital_blocked)}</td><td>{u.severity}</td></tr>
             ))}
           </tbody>
         </table>

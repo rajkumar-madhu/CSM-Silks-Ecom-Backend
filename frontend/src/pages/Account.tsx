@@ -222,7 +222,7 @@ export function Account() {
             <div className="lc-tier">{(user?.loyalty_tier || 'bronze').toUpperCase()} MEMBER</div>
             <div className="lc-name">{user?.name || user?.full_name || 'CSM Customer'}</div>
             <div className="lc-pts-row"><div className="lc-pts">{user?.loyalty_points || 0}</div><div className="lc-pts-lbl">points</div></div>
-            <div className="lc-worth">1 point = Rs 1 checkout discount</div>
+            <div className="lc-worth">1 point = ₹1 checkout discount</div>
             <div className="lc-prog-labels"><span>Bronze</span><span>Elite benefits unlock with repeat orders</span></div>
             <div className="lc-prog"><div className="lc-prog-fill" style={{ width: `${loyaltyProgress}%` }} /></div>
           </div>

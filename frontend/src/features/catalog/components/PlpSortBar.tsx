@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { FALLBACK_SORTS, activePlpChips, clearedPlpState, type PlpFilterState } from '../plpFilters';
+import { FALLBACK_SORTS, activePlpChips, clearedPlpState, plpTotalLabel, type PlpFilterState } from '../plpFilters';
 import type { CatalogFacets } from '@/types';
 
 interface PlpSortBarProps {
@@ -31,7 +31,7 @@ export function PlpSortBar({ title, total, loading, facets, state, liveChip, onC
         <div className="plp-sortbar-title">
           <h1>{title}</h1>
           <span className="plp-sortbar-count">
-            {loading && total === null ? 'Loading…' : `(${(total ?? 0).toLocaleString('en-IN')} Items)`}
+            {loading && total === null ? plpTotalLabel(total, loading) : `(${plpTotalLabel(total, loading)} Items)`}
           </span>
           {liveChip && <span className={`ws-chip ${liveChip.className}`}>{liveChip.label}</span>}
         </div>

@@ -18,8 +18,30 @@ def calculate_gst(subtotal: Decimal) -> tuple[Decimal, Decimal]:
     return cgst, sgst
 
 
+def effective_loyalty_rate() -> Decimal:
+    """Coins per rupee right now, including any live coins offer.
+
+    One helper for two callers on purpose: the points actually awarded below and the
+    rate the product page quotes both come from here, so a "2x coins this week" offer
+    cannot be advertised without also being paid. With several live coins offers the
+    shopper gets the best one.
+    """
+    from .models import Offer
+
+    rate = Decimal(str(settings.LOYALTY_POINTS_PER_RUPEE))
+    multiplier = (
+        Offer.objects.live()
+        .filter(kind=Offer.Kind.COINS, coins_multiplier__gt=0)
+        .order_by("-coins_multiplier")
+        .values_list("coins_multiplier", flat=True)
+        .first()
+    )
+    return rate * multiplier if multiplier else rate
+
+
 def calculate_loyalty_points(order_total: Decimal) -> int:
-    return int(order_total * Decimal(str(settings.LOYALTY_POINTS_PER_RUPEE)))
+    # Truncated, not rounded, and the product page truncates the same way.
+    return int(order_total * effective_loyalty_rate())
 
 
 def calculate_coupon_discount(subtotal: Decimal, coupon_code: str = "") -> Decimal:

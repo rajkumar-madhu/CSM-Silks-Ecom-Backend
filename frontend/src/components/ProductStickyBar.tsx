@@ -1,4 +1,5 @@
 import { ShoppingBag, Zap } from 'lucide-react';
+import { inr } from '@/lib/money';
 
 type ProductStickyBarProps = {
   price: number;
@@ -12,16 +13,16 @@ export function ProductStickyBar({ price, inStock, onAddToCart, onBuyNow }: Prod
     <div className="pd-sticky-bar" aria-label="Quick purchase actions">
       <div className="pd-sticky-price">
         <span className="pd-sticky-label">Offer price</span>
-        <strong>Rs {price.toLocaleString('en-IN')}</strong>
+        <strong>{inr(price)}</strong>
       </div>
       <div className="pd-sticky-actions">
-        <button type="button" className="pd-sticky-cart" onClick={onAddToCart} disabled={!inStock} aria-label={inStock ? 'Add to cart from quick bar' : 'Sold out'}>
+        <button type="button" className="pd-sticky-cart" onClick={onAddToCart} disabled={!inStock} aria-label={inStock ? 'Add to bag from quick bar' : 'Sold out'}>
           <ShoppingBag size={18} />
-          {inStock ? 'Add to cart' : 'Sold out'}
+          {inStock ? 'Add to Bag' : 'Sold out'}
         </button>
         <button type="button" className="pd-sticky-buy" onClick={onBuyNow} disabled={!inStock} aria-label={inStock ? 'Buy now from quick bar' : 'Unavailable'}>
           <Zap size={18} />
-          Buy now
+          Buy Now
         </button>
       </div>
     </div>

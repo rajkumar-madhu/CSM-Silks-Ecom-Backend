@@ -18,6 +18,8 @@ import {
   clearedPlpState,
   parsePlpParams,
   plpStateToParams,
+  plpTotalLabel,
+  slugToLabel,
   type PlpFilterState,
 } from './plpFilters';
 
@@ -26,7 +28,9 @@ export interface CatalogPlpQuickLink {
   label: string;
   note: string;
   buildState: (state: PlpFilterState) => PlpFilterState;
-  clearState?: (state: PlpFilterState) => PlpFilterState;
+  /** Undo only what buildState applied. Required so a pick can never fall back to resetting
+   *  every other filter on the page when it is toggled off. */
+  clearState: (state: PlpFilterState) => PlpFilterState;
   isActive?: (state: PlpFilterState) => boolean;
 }
 
@@ -40,14 +44,6 @@ interface CatalogPlpProps {
 }
 
 const PER_PAGE = 24;
-
-function formatSlug(value: string) {
-  return value
-    .split('-')
-    .filter(Boolean)
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
 
 export function CatalogPlp({ gender, title, description, slides, tiles, quickLinks = [] }: CatalogPlpProps) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -72,7 +68,7 @@ export function CatalogPlp({ gender, title, description, slides, tiles, quickLin
     for (const category of facets?.categories || []) next.set(category.slug, category.name);
     return next;
   }, [facets, tiles]);
-  const activeCategoryLabel = state.category ? categoryLabels.get(state.category) || formatSlug(state.category) : '';
+  const activeCategoryLabel = state.category ? categoryLabels.get(state.category) || slugToLabel(state.category) : '';
   const displayTitle = activeCategoryLabel ? `${activeCategoryLabel} Edit` : title;
   const activeFilterCount = useMemo(() => activePlpChips(state).length, [state]);
   const collectionPath = gender === 'men' ? '/mens' : '/womens';
@@ -219,9 +215,9 @@ export function CatalogPlp({ gender, title, description, slides, tiles, quickLin
       <section className="plp-discovery" aria-label="Collection overview">
         <nav className="plp-breadcrumbs" aria-label="Breadcrumb">
           <Link to="/">Home</Link>
-          <span>/</span>
+          <span aria-hidden="true">/</span>
           <Link to={collectionPath}>{collectionLabel}</Link>
-          <span>/</span>
+          <span aria-hidden="true">/</span>
           <span aria-current="page">{displayTitle}</span>
         </nav>
 
@@ -229,7 +225,7 @@ export function CatalogPlp({ gender, title, description, slides, tiles, quickLin
           <p className="plp-discovery-copy">{discoveryCopy}</p>
           <div className="plp-discovery-pills" aria-label="Collection highlights">
             <span className="plp-discovery-pill">
-              <strong>{loading && total === null ? 'Loading…' : (total ?? 0).toLocaleString('en-IN')}</strong>
+              <strong>{plpTotalLabel(total, loading)}</strong>
               styles live
             </span>
             <span className="plp-discovery-pill">
@@ -252,7 +248,7 @@ export function CatalogPlp({ gender, title, description, slides, tiles, quickLin
                   key={link.key}
                   type="button"
                   className={`plp-quick-pick ${active ? 'active' : ''}`}
-                  onClick={() => applyState(active ? (link.clearState ? link.clearState(state) : clearedPlpState(state)) : link.buildState(state))}
+                  onClick={() => applyState(active ? link.clearState(state) : link.buildState(state))}
                 >
                   <span className="plp-quick-pick-label">{link.label}</span>
                   <span className="plp-quick-pick-note">{link.note}</span>

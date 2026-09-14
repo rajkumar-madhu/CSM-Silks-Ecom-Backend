@@ -7,6 +7,8 @@ import {
   clearedPlpState,
   parsePlpParams,
   plpStateToParams,
+  plpTotalLabel,
+  slugToLabel,
   toggleListValue,
 } from './plpFilters';
 
@@ -188,5 +190,30 @@ describe('attribute filters', () => {
     const state = { ...DEFAULT_PLP_STATE, attributes: { fabric: ['kanjivaram-silk'], work: ['woven'] } };
     const chips = activePlpChips(state);
     expect(chips.filter(chip => chip.key.startsWith('attr:')).length).toBe(2);
+  });
+});
+
+describe('slugToLabel', () => {
+  it('title-cases each hyphen-separated word', () => {
+    expect(slugToLabel('daily-wear')).toBe('Daily Wear');
+    expect(slugToLabel('bridal')).toBe('Bridal');
+    expect(slugToLabel('-kanjivaram--silk-')).toBe('Kanjivaram Silk');
+  });
+
+  it('labels the category chip the same way as the PLP heading', () => {
+    const chips = activePlpChips({ ...DEFAULT_PLP_STATE, category: 'daily-wear' });
+    expect(chips[0].label).toBe(slugToLabel('daily-wear'));
+  });
+});
+
+describe('plpTotalLabel', () => {
+  it('reads as loading only before the first count is known', () => {
+    expect(plpTotalLabel(null, true)).toBe('Loading…');
+    expect(plpTotalLabel(1200, true)).toBe('1,200');
+  });
+
+  it('formats a known count in en-IN and treats null as zero once idle', () => {
+    expect(plpTotalLabel(125000, false)).toBe('1,25,000');
+    expect(plpTotalLabel(null, false)).toBe('0');
   });
 });

@@ -1,6 +1,6 @@
 export function Ticker() {
   const items = [
-    'Free shipping above Rs 999',
+    'Free shipping above ₹999',
     'GI-tagged Kanjivaram silk',
     'Bridal edits now live',
     'New festive colors in',

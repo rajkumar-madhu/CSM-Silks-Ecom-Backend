@@ -205,7 +205,7 @@ class RefundView(APIView):
                 request,
                 action="payment.refund",
                 entity=payment,
-                summary=f"Refund of Rs {amount} recorded for {payment.order.order_number}.",
+                summary=f"Refund of ₹{amount} recorded for {payment.order.order_number}.",
                 metadata={"amount": str(amount), "refund_id": refund_id, "refund_status": payment.status, "provider_status": provider_status},
             )
             return Response({"message": "Refund recorded", "refund_id": payment.refund_id, "provider_status": provider_status, "status": payment.status})

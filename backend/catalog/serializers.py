@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.utils.text import slugify
@@ -229,6 +230,7 @@ class ProductDetailSerializer(ProductListSerializer):
     reviews = serializers.SerializerMethodField()
     attributes = serializers.SerializerMethodField()
     attribute_labels = serializers.SerializerMethodField()
+    loyalty_points_per_rupee = serializers.SerializerMethodField()
 
     class Meta(ProductListSerializer.Meta):
         fields = ProductListSerializer.Meta.fields + [
@@ -243,9 +245,16 @@ class ProductDetailSerializer(ProductListSerializer):
             "reviews",
             "attributes",
             "attribute_labels",
+            "loyalty_points_per_rupee",
             "created_at",
             "updated_at",
         ]
+
+    def get_loyalty_points_per_rupee(self, obj) -> float:
+        """The earn rate the PDP quotes back to the shopper. Served from the same
+        setting orders/pricing.py awards from, so the "you will earn N coins" line
+        can never drift from what checkout actually credits."""
+        return float(settings.LOYALTY_POINTS_PER_RUPEE)
 
     def get_attributes(self, obj) -> list[dict]:
         """Typed spec rows for the PDP. Null attributes are omitted rather than
