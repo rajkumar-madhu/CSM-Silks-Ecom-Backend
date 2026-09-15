@@ -94,5 +94,17 @@ Six repository secrets are required, under **Settings → Secrets and variables 
 deploy time trusts whatever answers on the day, which is the thing host-key checking exists to
 prevent. Pin it once.
 
+Until those secrets exist there is no deploy target, so an automatic run skips quietly rather
+than marking `main` failed for a deploy nobody has set up. That quiet path is deliberately
+narrow:
+
+| Situation | Result |
+|---|---|
+| No secrets set, automatic run after CI | skipped, with a notice |
+| No secrets set, run started by hand | fails — someone explicitly asked to ship |
+| Some set, some missing | fails, naming the missing ones |
+
+A half-configured deploy is a mistake rather than an absence, and never goes quiet.
+
 The job declares `environment: production`, so required reviewers or a wait timer can be added
 in **Settings → Environments** to gate deploys behind a human.

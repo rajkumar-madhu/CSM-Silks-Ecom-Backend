@@ -19,6 +19,16 @@
 # DEPLOY_KNOWN_HOSTS is deliberately required rather than running ssh-keyscan
 # here. Scanning at deploy time trusts whatever answers on the day, which is the
 # thing host-key checking exists to prevent; pinning it once is a one-off cost.
+#
+# Until those secrets exist there is no deploy target, so an automatic run skips
+# quietly instead of painting main red for a deploy nobody has set up yet. The
+# quiet path is narrow on purpose:
+#
+#   none set + automatic run  → skip, with a notice
+#   none set + manual run     → fail; someone explicitly asked to ship
+#   some set, some missing    → fail, naming the missing ones
+#
+# A half-configured deploy is a mistake, not an absence, and never goes quiet.
 
 name: Deploy
 
@@ -50,8 +60,50 @@ jobs:
     environment: production
 
     steps:
+      - name: Check the deploy target is configured
+        id: preflight
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER_NAME: ${{ secrets.DEPLOY_USER }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          APP_PATH: ${{ secrets.DEPLOY_PATH }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HEALTH_URL: ${{ secrets.DEPLOY_HEALTH_URL }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          missing=""
+          present=0
+          check() {
+            if [ -z "$2" ]; then missing="$missing $1"; else present=$((present + 1)); fi
+          }
+          check DEPLOY_HOST "$HOST"
+          check DEPLOY_USER "$USER_NAME"
+          check DEPLOY_SSH_KEY "$SSH_KEY"
+          check DEPLOY_PATH "$APP_PATH"
+          check DEPLOY_KNOWN_HOSTS "$KNOWN_HOSTS"
+          check DEPLOY_HEALTH_URL "$HEALTH_URL"
+
+          if [ -z "$missing" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+
+          if [ "$present" -eq 0 ] && [ "$MANUAL" != "true" ]; then
+            echo "::notice::No deploy target is configured, so there is nothing to ship. Set the six DEPLOY_* secrets listed in the header of this workflow to turn deploys on."
+            exit 0
+          fi
+
+          if [ "$present" -eq 0 ]; then
+            echo "::error::No deploy target is configured. Set the six DEPLOY_* secrets listed in the header of this workflow."
+          else
+            echo "::error::Deploy is only partly configured — missing:$missing. See the header of this workflow."
+          fi
+          exit 1
+
       - name: Resolve the commit to deploy
         id: target
+        if: steps.preflight.outputs.configured == 'true'
         # Through env, never interpolated into the script body: `inputs.sha` is
         # attacker-controlled text and `${{ }}` splices it in before bash parses.
         env:
@@ -69,15 +121,13 @@ jobs:
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
+      # Preflight has already established every secret below is non-empty.
       - name: Open an SSH session to the host
+        if: steps.preflight.outputs.configured == 'true'
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
-          if [ -z "$SSH_KEY" ] || [ -z "$KNOWN_HOSTS" ]; then
-            echo "::error::DEPLOY_SSH_KEY and DEPLOY_KNOWN_HOSTS must both be set. See the header of this workflow."
-            exit 1
-          fi
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
@@ -85,6 +135,7 @@ jobs:
           chmod 644 ~/.ssh/known_hosts
 
       - name: Build and recreate the stack
+        if: steps.preflight.outputs.configured == 'true'
         env:
           HOST: ${{ secrets.DEPLOY_HOST }}
           USER_NAME: ${{ secrets.DEPLOY_USER }}
@@ -108,13 +159,10 @@ jobs:
           EOF
 
       - name: Wait for the site to answer
+        if: steps.preflight.outputs.configured == 'true'
         env:
           HEALTH_URL: ${{ secrets.DEPLOY_HEALTH_URL }}
         run: |
-          if [ -z "$HEALTH_URL" ]; then
-            echo "::error::DEPLOY_HEALTH_URL is not set, so this deploy cannot be verified."
-            exit 1
-          fi
           # The API container's own healthcheck allows a 60s start period, and
           # migrations run before it serves, so give it room before calling it.
           for attempt in $(seq 1 40); do
@@ -130,4 +178,5 @@ jobs:
           exit 1
 
       - name: Report what shipped
+        if: steps.preflight.outputs.configured == 'true'
         run: echo "Deployed ${{ steps.target.outputs.sha }} to production."
